@@ -7,6 +7,7 @@
 BROKEN_RECIPE = '''\
 component: com.example.Broken
 version: 1
+command: broken
 base: net.debian.core13
 base-version: "13"
 parts: [{name: broken, buildsystem: quake}]

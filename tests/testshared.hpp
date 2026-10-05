@@ -106,6 +106,7 @@ constexpr std::string_view APP_HEADER = R"(component: com.example.app
 version: 1
 base: net.example.core
 base-version: 1
+command: app
 )";
 
 /**
@@ -115,6 +116,7 @@ constexpr std::string_view APP_RECIPE = R"(component: com.example.app
 version: 1
 base: net.example.core
 base-version: 1
+command: app
 parts:
 - name: hello
   buildsystem: meson

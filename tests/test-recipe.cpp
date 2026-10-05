@@ -89,6 +89,14 @@ name: Example Core
 summary: Core for the tests
 )";
     const std::string bootstrap = "bootstrap: {suite: trixie, snapshot: '2026-10-04T00:00:00Z'}\n";
+    const std::string commandless = R"(component: com.example.app
+version: 1
+base: net.example.core
+base-version: 1
+parts:
+- name: hello
+  buildsystem: meson
+)";
 
     // unknown keys and invalid values
     CHECK(recipe_rejected(app + "unknown-key: 1\n"));
@@ -96,12 +104,17 @@ summary: Core for the tests
     // versions have no epoch
     CHECK(recipe_rejected(std::string(BARE_PLATFORM) + "version: '1:2'\n"));
 
+    // an app needs a command, which Manifold runs by its name
+    CHECK(recipe_rejected(commandless));
+    CHECK(recipe_rejected(commandless + "command: bin/app\n"));
+
     // a core needs a bootstrap with suite and snapshot
     CHECK(recipe_rejected(core));
     CHECK(recipe_rejected(core + "bootstrap: {suite: trixie}\n"));
 
-    // locales are plain names (UTF-8 is implied)
+    // locales are plain names (UTF-8 is implied), listed once
     CHECK(recipe_rejected(core + bootstrap + "locales: [de_DE.UTF-8]\n"));
+    CHECK(recipe_rejected(core + bootstrap + "locales: [de_DE, de_DE]\n"));
 }
 
 TEST_CASE("Recipe: keys per recipe type", "[recipe]")
@@ -123,6 +136,24 @@ base: net.example.core
     const std::string app(APP_RECIPE);
     const std::string actions = "actions: [{name: tidy, run: 'true'}]\n";
 
+    // valid as it is, but not with app keys
+    auto takes_no_app_keys = [](const std::string &recipe) {
+        INFO(recipe);
+        CHECK(!recipe_rejected(recipe));
+        CHECK(recipe_rejected(recipe + "command: app\n"));
+        CHECK(recipe_rejected(recipe + "kit-strategy: strict\n"));
+        CHECK(recipe_rejected(recipe + "generate-sdk: true\n"));
+        CHECK(recipe_rejected(recipe + "run-on-sdk: true\n"));
+        // the default does no harm
+        CHECK(!recipe_rejected(recipe + "kit-strategy: roaming\n"));
+    };
+    takes_no_app_keys(core);
+    takes_no_app_keys(platform);
+
+    // a core has no base or base-version
+    CHECK(recipe_rejected(core + "base: net.example.other\n"));
+    CHECK(recipe_rejected(core + "base-version: 1\n"));
+
     // a platform has no base-version, but its parts go into its /usr like those of a core
     CHECK(recipe_rejected(platform + "base-version: 1\n"));
     CHECK(!recipe_rejected(platform + "parts: [{name: hello, buildsystem: meson}]\n"));
@@ -140,17 +171,20 @@ base: net.example.core
 TEST_CASE("Recipe: MetaInfo keys", "[recipe]")
 {
     const std::string app(APP_RECIPE);
+    TempDir dir("metainfo");
+    write_file(dir / "com.example.app.metainfo.xml", "<component/>\n");
 
-    auto plain = parse_recipe(app, "inline");
-    auto named = parse_recipe(app + "metainfo-file: com.example.app.metainfo.xml\n", "inline");
+    auto plain = parse_recipe(app, "inline", dir.path());
+    auto named = parse_recipe(app + "metainfo-file: com.example.app.metainfo.xml\n", "inline", dir.path());
 
     // metainfo-file is optional and counts for the hash
     CHECK(!plain.metainfo_file);
     CHECK(named.metainfo_file == "com.example.app.metainfo.xml");
     CHECK(named.hash != plain.hash);
 
-    // it names a file
+    // it names an existing file next to the recipe
     CHECK(recipe_rejected(app + "metainfo-file: ''\n"));
+    CHECK(recipe_rejected(app + "metainfo-file: missing.metainfo.xml\n", dir.path()));
 
     // an app ships its own MetaInfo
     for (std::string key : {"name", "summary", "description", "project-license", "homepage"})
