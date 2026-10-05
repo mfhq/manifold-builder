@@ -146,3 +146,79 @@ TEST_CASE("Sandbox: strip_overlay_markers", "[sandbox]")
         fs::permissions(dir / "locked", fs::perms::owner_write, fs::perm_options::add);
     }
 }
+
+TEST_CASE("Sandbox: move_paths", "[sandbox]")
+{
+    TempDir dir("move");
+    auto tree = dir / "tree";
+    fs::create_directories(tree / "usr/include/foo");
+    write_file(tree / "usr/include/foo/foo.h", "");
+    fs::create_directories(tree / "usr/share/doc/foo");
+    write_file(tree / "usr/share/doc/foo/copyright", "");
+    // the link's target is in a layer below
+    fs::create_directories(tree / "usr/lib");
+    fs::create_symlink("libfoo.so.1", tree / "usr/lib/libfoo.so");
+
+    Script script;
+
+    SECTION("listed paths and globs move to the SDK tree")
+    {
+        const auto cwd = shell_quote(dir.path().string());
+        script.line("cd " + cwd);
+        move_paths(script, tree, "usr", {"include", "lib/*.so", "share/doc", "nothing/*"}, dir / "sdk");
+
+        // the shell options and the directory are the script's own again
+        script.line("! shopt -q globstar && ! shopt -q nullglob && [ \"$PWD\" = " + cwd + " ]");
+
+        CHECK(run_status({.argv = {"bash", "-c", script.text()}}) == 0);
+
+        // everything listed is in the SDK now
+        CHECK(fs::exists(dir / "sdk/usr/include/foo/foo.h"));
+        CHECK(fs::exists(dir / "sdk/usr/share/doc/foo/copyright"));
+        CHECK(fs::is_symlink(dir / "sdk/usr/lib/libfoo.so"));
+
+        // and gone from the tree
+        CHECK(!fs::exists(tree / "usr/include"));
+        CHECK(!fs::exists(tree / "usr/share/doc"));
+        CHECK(!fs::exists(fs::symlink_status(tree / "usr/lib/libfoo.so")));
+    }
+
+    SECTION("a path that could not be copied stays where it is")
+    {
+        // no directory can be made below a file
+        write_file(dir / "file", "");
+        move_paths(script, tree, "usr", {"include"}, dir / "file/sdk");
+
+        CHECK(run_status({.argv = {"bash", "-c", script.text()}, .quiet = true}) != 0);
+        CHECK(fs::exists(tree / "usr/include"));
+    }
+}
+
+TEST_CASE("Sandbox: merge_into_usr", "[sandbox]")
+{
+    TempDir dir("merge-usr");
+    fs::create_directories(dir / "lib/udev/rules.d");
+    write_file(dir / "lib/udev/rules.d/60-foo.rules", "");
+    fs::create_directories(dir / "usr/lib/udev/rules.d");
+    write_file(dir / "usr/lib/udev/rules.d/50-bar.rules", "");
+    fs::create_directories(dir / "sbin");
+    write_file(dir / "sbin/foo", "");
+    fs::create_directories(dir / "etc");
+    fs::create_symlink("usr/bin", dir / "bin");
+
+    Script script;
+    merge_into_usr(script, dir.path());
+
+    CHECK(run_status({.argv = {"bash", "-c", script.text()}}) == 0);
+
+    // directories were merged into their /usr counterparts
+    CHECK(fs::exists(dir / "usr/lib/udev/rules.d/60-foo.rules"));
+    CHECK(fs::exists(dir / "usr/lib/udev/rules.d/50-bar.rules"));
+    CHECK(fs::exists(dir / "usr/sbin/foo"));
+    CHECK(!fs::exists(dir / "lib"));
+    CHECK(!fs::exists(dir / "sbin"));
+
+    // links and everything else stay
+    CHECK(fs::is_symlink(dir / "bin"));
+    CHECK(fs::is_directory(dir / "etc"));
+}
