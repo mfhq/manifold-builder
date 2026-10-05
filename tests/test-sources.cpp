@@ -54,6 +54,73 @@ TEST_CASE("Sources: dir", "[sources]")
     CHECK(record.pin() == tree_hash(dir / "project"));
     // a missing directory fails
     CHECK_THROWS_AS(fetch({.type = "dir", .path = "missing"}, dir / "out", dir), BuildError);
+
+    SECTION("modes and times are kept")
+    {
+        fs::permissions(dir / "project/src", fs::perms::owner_write, fs::perm_options::remove);
+        auto copied = fetch({.type = "dir", .path = "project"}, dir / "copied", dir);
+
+        CHECK((fs::status(dir / "copied/src").permissions() & fs::perms::owner_write) == fs::perms::none);
+        CHECK(fs::last_write_time(dir / "copied/src/main.c") == fs::last_write_time(dir / "project/src/main.c"));
+        CHECK(copied.pin() == record.pin());
+
+        // give the write bit back, or the directories can not be removed
+        fs::permissions(dir / "project/src", fs::perms::owner_write, fs::perm_options::add);
+        fs::permissions(dir / "copied/src", fs::perms::owner_write, fs::perm_options::add);
+    }
+
+    SECTION("hidden files are left out, so git does not change the hash")
+    {
+        fs::create_directories(dir / "project/.git");
+        write_file(dir / "project/.git/index", "changes all the time\n");
+        write_file(dir / "project/src/.main.c.swp", "x");
+
+        auto hidden = fetch({.type = "dir", .path = "project"}, dir / "hidden", dir);
+
+        CHECK(fs::exists(dir / "hidden/src/main.c"));
+        CHECK(!fs::exists(dir / "hidden/.git"));
+        CHECK(!fs::exists(dir / "hidden/src/.main.c.swp"));
+        CHECK(hidden.pin() == record.pin());
+    }
+}
+
+TEST_CASE("Sources: dir leaves out work dirs and the output", "[sources]")
+{
+    // the recipe next to the code, with the work dir and the bundle beside it
+    TempDir dir("source-dir-own");
+    make_project(dir.path());
+    auto work = dir / "_build-app";
+    fs::create_directories(work / "rootfs");
+    write_file(dir / "app.manifold", "an earlier bundle");
+
+    // the work dir of another recipe, kept with --keep-work
+    fs::create_directories(dir / "_build-other/rootfs");
+    write_file(dir / "_build-other/.gitignore", WORK_DIR_GITIGNORE_DATA);
+
+    // any other directory with a .gitignore is a source
+    fs::create_directories(dir / "docs");
+    write_file(dir / "docs/.gitignore", "*.html\n");
+    write_file(dir / "docs/index.md", "# hello\n");
+
+    auto clean = tree_hash(dir.path(), [&](const fs::path &path) {
+        return path.filename().string().starts_with('.') || path == work || path == dir / "app.manifold"
+               || path == dir / "_build-other";
+    });
+
+    auto record = source_fetcher_for("dir")->fetch(
+        {.type = "dir", .path = "."},
+        work / "sources/app",
+        {.dir = dir.path(), .scratch = work / "downloads", .skip = {work, dir / "app.manifold"}});
+
+    // the code and its documentation are there
+    CHECK(read_file(work / "sources/app/README") == "hello\n");
+    CHECK(fs::exists(work / "sources/app/docs/index.md"));
+    // work dirs and the bundle are left out
+    CHECK(!fs::exists(work / "sources/app/_build-app"));
+    CHECK(!fs::exists(work / "sources/app/_build-other"));
+    CHECK(!fs::exists(work / "sources/app/app.manifold"));
+    // and they do not change the hash
+    CHECK(record.pin() == clean);
 }
 
 TEST_CASE("Sources: file", "[sources]")
@@ -61,6 +128,12 @@ TEST_CASE("Sources: file", "[sources]")
     TempDir dir("source-file");
     write_file(dir / "launcher.sh", "#!/bin/sh\n");
     auto sha256 = checksum_file_hex(dir / "launcher.sh", ChecksumKind::Sha256);
+
+    // names come from the path, or the URL without its query
+    CHECK(source_file_name({.type = "file", .path = "data/launcher.sh"}) == "launcher.sh");
+    // a local file may have any name
+    CHECK(source_file_name({.type = "file", .path = "a#b?c"}) == "a#b?c");
+    CHECK(source_file_name({.type = "file", .url = "https://example.org/v1.zip?download=1#top"}) == "v1.zip");
 
     SECTION("a local file is copied and recorded with its checksum")
     {
@@ -82,6 +155,10 @@ TEST_CASE("Sources: file", "[sources]")
 TEST_CASE("Sources: archive", "[sources]")
 {
     TempDir dir("source-archive");
+
+    // a download link with a query is still unpacked as a zip
+    Source link{.type = "archive", .url = "https://example.org/v1.zip?download=1", .sha256 = "x"};
+    CHECK(source_fetcher_for("archive")->tools(link) == std::vector<std::string>{"unzip", "curl"});
 
     SECTION("the top directory of a tarball is stripped")
     {
