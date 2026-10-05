@@ -263,12 +263,14 @@ done
             shell_quote(tree.string())));
 }
 
-void Sandbox::run(const Script &script) const
+void Sandbox::run(const Script &script)
 {
     fs::create_directories(tmp_dir);
     auto report = tmp_dir / "failure-report";
     fs::remove(report);
+    auto file = tmp_dir / std::format("script-{}.sh", ++m_scripts);
     auto text = std::format("exec {}>{}{}", REPORT_FD, shell_quote(report.string()), script.text());
+    write_file(file, text);
 
     // bind the whole host, the scripts work on host paths
     auto command = in_namespace(
@@ -290,11 +292,10 @@ void Sandbox::run(const Script &script) const
          "--die-with-parent",
          "--",
          "bash",
-         "-c",
-         text});
+         file.string()});
     command.env["TMPDIR"] = tmp_dir.string();
 
-    LOG_DEBUG(logSandbox, "Running in namespace:\n{}", text);
+    LOG_DEBUG(logSandbox, "Running {} in the namespace:\n{}", file.string(), text);
     log::flush();
     int status = run_status(command);
     if (status != 0)
@@ -321,6 +322,8 @@ void Sandbox::check_available()
 void run_part_build(Script &s, const PartBuild &build)
 {
     auto source_dir = fs::path("/run/build") / build.name;
+    fs::create_directories(build.script_file.parent_path());
+    write_file(build.script_file, traced_script(build.script));
     std::vector<std::string> argv = {
         "bwrap",
         "--bind",
@@ -343,6 +346,9 @@ void run_part_build(Script &s, const PartBuild &build)
         source_dir.string(),
         "--dir",
         "/run/build/home",
+        "--ro-bind",
+        build.script_file.string(),
+        "/run/script.sh",
     };
     for (const auto &[host, inside] : build.binds)
         argv.insert(argv.end(), {"--bind", host.string(), inside});
@@ -365,8 +371,7 @@ void run_part_build(Script &s, const PartBuild &build)
          std::to_string(build.epoch)});
     for (const auto &[name, value] : build.env)
         argv.insert(argv.end(), {"--setenv", name, value});
-    argv.insert(
-        argv.end(), {"--die-with-parent", "--", "bash", "-Eeuo", "pipefail", "-c", traced_script(build.script)});
+    argv.insert(argv.end(), {"--die-with-parent", "--", "bash", "-Eeuo", "pipefail", "/run/script.sh"});
     s.run(argv);
 }
 
