@@ -36,9 +36,14 @@ ImageFile image_of(const fs::path &dir, const std::string &file)
 }
 
 /**
- * Write the manifest and fake image of a core or its SDK to `dir`.
+ * Write the manifest and fake image of a core or its SDK to `dir`, with `build` telling rebuilds apart.
  */
-void write_core(const fs::path &dir, const std::string &version, bool sdk, int64_t revision = 1)
+void write_core(
+    const fs::path &dir,
+    const std::string &version,
+    bool sdk,
+    int64_t revision = 1,
+    const std::string &build = "")
 {
     auto manifest = test::fake_manifest(sdk ? "net.example.core.sdk" : "net.example.core", "core");
     manifest.version = version;
@@ -46,7 +51,7 @@ void write_core(const fs::path &dir, const std::string &version, bool sdk, int64
     manifest.architecture = "amd64";
     manifest.sdk = sdk;
     manifest.identity = checksum_data_hex(sdk ? "sdk-identity" : "core-identity", ChecksumKind::Sha256);
-    manifest.content_hash = checksum_data_hex(version + (sdk ? "-sdk" : ""), ChecksumKind::Sha256);
+    manifest.content_hash = checksum_data_hex(version + build + (sdk ? "-sdk" : ""), ChecksumKind::Sha256);
 
     // an SDK is layered on its own runtime
     if (sdk)
@@ -54,7 +59,7 @@ void write_core(const fs::path &dir, const std::string &version, bool sdk, int64
             .component = "net.example.core",
             .version = version,
             .identity = checksum_data_hex("core-identity", ChecksumKind::Sha256),
-            .content_hash = checksum_data_hex(version, ChecksumKind::Sha256),
+            .content_hash = checksum_data_hex(version + build, ChecksumKind::Sha256),
         };
 
     auto stem = std::format("{}_{}-{}_amd64", manifest.component, version, revision);
@@ -149,11 +154,17 @@ TEST_CASE("Store: finding the base of a build", "[store]")
     // a platform uses the exact core it was built on
     write_platform(dir, false);
     write_platform(dir, true);
+    // a newer build of the core version the platform was built on
+    write_core(dir, "12.2", false, 2, "rebuilt");
+    write_core(dir, "12.2", true, 2, "rebuilt");
     auto on_platform = find_stack(dir, "net.example.platform", "");
     REQUIRE(on_platform.platform);
     CHECK(on_platform.base().runtime.component == "net.example.platform");
-    // not the newer 12.10
+    // not the rebuilt 12.2-2, and not the newer 12.10
     CHECK(on_platform.core.runtime.version == "12.2");
+    CHECK(on_platform.core.runtime.revision == 1);
+    // and the SDK of that build, not of the rebuild
+    CHECK(on_platform.core.sdk.revision == 1);
 
     // an installed store is read like Manifold does
     auto store = dir / "store";
