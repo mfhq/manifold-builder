@@ -9,8 +9,10 @@
 #include "utils.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 using namespace mfb;
+using Catch::Matchers::ContainsSubstring;
 using mfb::test::TempDir;
 
 TEST_CASE("Utils: shell_quote", "[utils]")
@@ -27,6 +29,16 @@ TEST_CASE("Utils: build_revision_from_time", "[utils]")
 
     // 2026-10-15T02:38:17Z: day 288, second 9497 = slot 949
     CHECK(build_revision_from_time(1792031897) == 22880949);
+}
+
+TEST_CASE("Utils: parse_int", "[utils]")
+{
+    CHECK(parse_int("1760000000") == 1760000000);
+    CHECK(parse_int("-5") == -5);
+    CHECK(!parse_int(""));
+    CHECK(!parse_int("123abc"));
+    CHECK(!parse_int(" 1"));
+    CHECK(!parse_int("99999999999999999999"));
 }
 
 TEST_CASE("Utils: remove_identical_files", "[utils]")
@@ -106,4 +118,31 @@ TEST_CASE("Utils: remove_identical_files", "[utils]")
         // elsewhere we still compare the content
         CHECK(fs::exists(upper / "etc/config"));
     }
+}
+
+TEST_CASE("Utils: file errors", "[utils]")
+{
+    TempDir dir("file-errors");
+    CHECK_THROWS_WITH(read_file(dir.path()), ContainsSubstring("Is a directory"));
+    CHECK_THROWS_WITH(read_file(dir / "missing"), ContainsSubstring("No such file"));
+
+    // an empty file is no error
+    write_file(dir / "empty", "");
+    CHECK(read_file(dir / "empty").empty());
+
+    // write errors are noticed on close
+    if (fs::exists("/dev/full"))
+        CHECK_THROWS_WITH(write_file("/dev/full", "x"), ContainsSubstring("No space left"));
+}
+
+TEST_CASE("Process: programs that can not be started", "[process]")
+{
+    TempDir dir("spawn");
+    write_file(dir / "script", "#!/bin/sh\n");
+
+    // not executable
+    CHECK_THROWS_WITH(run({.argv = {(dir / "script").string()}}), ContainsSubstring("Permission denied"));
+    CHECK_THROWS_WITH(run({.argv = {"mfb-no-such-program"}}), ContainsSubstring("No such file or directory"));
+    // run_status reports it instead
+    CHECK(run_status({.argv = {"mfb-no-such-program"}}) == -1);
 }
