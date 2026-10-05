@@ -11,6 +11,7 @@
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <zip.h>
 
 using namespace mfb;
@@ -143,4 +144,24 @@ TEST_CASE("Bundle: bundles are signed with SSH keys", "[bundle]")
     // a changed file is noticed before signing
     replace_entry(bundle, "catalog/manifold-local.xml", "x");
     CHECK_THROWS_AS(sign_bundle(bundle, key), BuildError);
+}
+
+TEST_CASE("Bundle: a bundle that cannot be signed is written unsigned", "[bundle]")
+{
+    if (!find_tool("ssh-keygen"))
+        SKIP("ssh-keygen is not installed");
+
+    TempDir dir("sign-fails");
+    write_file(dir / "key", "not a key\n");
+    CHECK_NOTHROW(check_sign_key(dir / "key"));
+    CHECK_THROWS_AS(check_sign_key(dir / "missing"), BuildError);
+
+    CHECK_THROWS_WITH(
+        make_test_bundle(dir.path(), dir / "key"), Catch::Matchers::ContainsSubstring("was written unsigned"));
+    auto bundle = dir / "core.manifold";
+    CHECK_NOTHROW(verify_bundle(bundle));
+    CHECK(zip_entry(bundle, "index.json.sig").empty());
+    // nothing is left of what ssh-keygen was given
+    CHECK(!fs::exists(dir / "core.manifold.index.json"));
+    CHECK(!fs::exists(dir / "core.manifold.index.json.sig"));
 }
