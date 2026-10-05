@@ -45,6 +45,7 @@ private:
     void prepare() override
     {
         m_system = make_core_system(*m_recipe.bootstrap);
+        m_system->check_bootstrap_tools();
         LOG_INFO(
             logBuild,
             "{} {}, SOURCE_DATE_EPOCH={}",
