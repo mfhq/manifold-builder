@@ -17,7 +17,6 @@ using namespace mfb;
 using mfb::test::APP_RECIPE;
 using mfb::test::CORE_BOOTSTRAP;
 using mfb::test::CORE_HEADER;
-using mfb::test::TempDir;
 
 namespace
 {
@@ -116,65 +115,40 @@ Version: 3.0.3
     CHECK(packages["zlib1g"] == "1:1.3.1-1");
 }
 
-TEST_CASE("Debian: apt-cache depends output", "[debian]")
+TEST_CASE("Debian: dpkg-shlibdeps output", "[debian]")
 {
-    auto graph = parse_apt_cache_depends(R"(qt6-base-dev
-  Depends: libqt6core6t64
- |Depends: libgl-dev
-  Depends: libgl1-mesa-dev
-  Depends: <libvirtual>
-    libprovider1
-    libprovider2
-  PreDepends: dpkg
-libqt6core6t64
-  Depends: libc6
-)");
+    const std::string depends =
+        "shlibs:Depends=libc6 (>= 2.34), libfoo1 (>= 1.2) | libfoo1t64, libbar2:any, libc6 (>= 2.38)\n";
 
-    // the first of each alternative, the first provider of a virtual package
-    CHECK(graph["qt6-base-dev"] == std::vector<std::string>{"libqt6core6t64", "libgl-dev", "libprovider1", "dpkg"});
-    CHECK(graph["libqt6core6t64"] == std::vector<std::string>{"libc6"});
+    // each package once, the first of its alternatives, without versions
+    CHECK(parse_shlibs_depends(depends) == std::vector<std::string>{"libbar2", "libc6", "libfoo1"});
+
+    // an app without any ELF file
+    CHECK(parse_shlibs_depends("").empty());
 }
 
 TEST_CASE("Debian: packages of a recipe", "[debian]")
 {
-    TempDir dir("runtime-request");
-    write_file(dir / "depends.txt", R"(libfoo-dev
-  Depends: libfoo1
-  Depends: libbar-dev
-  Depends: pkgconf
-libbar-dev
-  Depends: libbar2
-)");
     auto debian = trixie();
     auto app = parse_recipe(
-        std::string(APP_RECIPE) + "packages: {apt: [libfoo-dev, fontconfig]}\npackages-sdk: {apt: [pkgconf, meson]}\n",
+        std::string(APP_RECIPE) + "packages: {apt: [libfoo1, fontconfig]}\npackages-sdk: {apt: [libfoo-dev, meson]}\n",
         "inline");
 
-    // development packages go to the SDK, the runtime gets what they depend on
-    CHECK(debian.development_packages(app) == std::vector<std::string>{"libfoo-dev"});
-    CHECK(
-        debian.packages_request_runtime(app, dir / "depends.txt")
-        == std::vector<std::string>{"fontconfig", "libbar2", "libfoo1"});
-    CHECK(debian.packages_request_sdk(app) == std::vector<std::string>{"fontconfig", "libfoo-dev", "meson", "pkgconf"});
-
-    // the recipe's own patterns replace the distribution's
-    auto own = parse_recipe(
-        std::string(APP_RECIPE) + "packages: {apt: [libfoo-dev, foo-tools]}\nsdk-patterns: ['*-tools']\n", "inline");
-    CHECK(debian.development_packages(own) == std::vector<std::string>{"foo-tools"});
+    // the runtime gets packages, the SDK gets packages-sdk as well
+    CHECK(debian.packages_request_runtime(app) == std::vector<std::string>{"fontconfig", "libfoo1"});
+    CHECK(debian.packages_request_sdk(app) == std::vector<std::string>{"fontconfig", "libfoo-dev", "libfoo1", "meson"});
 
     // locales bring the packages that generate them
-    write_file(dir / "none.txt", "");
     auto core = parse_recipe(
         std::string(CORE_HEADER) + std::string(CORE_BOOTSTRAP) + "locales: [de_DE]\npackages: {apt: [fontconfig]}\n",
         "inline");
-    CHECK(
-        debian.packages_request_runtime(core, dir / "none.txt")
-        == std::vector<std::string>{"fontconfig", "libc-l10n", "locales"});
+    CHECK(debian.packages_request_runtime(core) == std::vector<std::string>{"fontconfig", "libc-l10n", "locales"});
 
-    // debug symbols go to the SDK, both old-style and automatic ones
-    CHECK(debian.is_development_package(app, "libc6-dbg"));
-    CHECK(debian.is_development_package(app, "libfoo1-dbgsym"));
-    CHECK(!debian.is_development_package(app, "fontconfig"));
+    // development packages, which the builder only warns about in a runtime
+    CHECK(debian.is_development_package("libfoo-dev"));
+    CHECK(debian.is_development_package("libc6-dbg"));
+    CHECK(debian.is_development_package("libfoo1-dbgsym"));
+    CHECK(!debian.is_development_package("fontconfig"));
 
     // packages of another package system are refused
     auto fedora = parse_recipe(std::string(APP_RECIPE) + "packages: {dnf: [foo-devel]}\n", "inline");
