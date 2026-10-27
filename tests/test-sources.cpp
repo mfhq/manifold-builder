@@ -291,7 +291,7 @@ TEST_CASE("Sources: git", "[sources]")
     Source mismatch{.type = "git", .url = url, .tag = "v1.0", .commit = latest.pin()};
     CHECK_THROWS_WITH(
         fetch(mismatch, dir / "mismatch", dir),
-        ContainsSubstring(std::format("tag v1.0 of {} is commit {}, not {}", mismatch.url, commit, latest.pin())));
+        ContainsSubstring(std::format("Tag v1.0 of {} is commit {}, not {}", mismatch.url, commit, latest.pin())));
 }
 
 TEST_CASE("Sources: parts", "[sources]")
