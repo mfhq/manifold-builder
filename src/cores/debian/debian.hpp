@@ -51,6 +51,7 @@ public:
      * Create the system for building on a Debian core.
      */
     static std::unique_ptr<DebianSystem> for_layer(const Manifest &core, int64_t epoch);
+
     /**
      * Check a Debian bootstrap section.
      *
@@ -89,9 +90,6 @@ public:
     std::vector<std::string> package_state_files() const override;
     std::string package_cache_dir() const override;
 
-    /**
-     * Point the tree at the regular archive instead of the snapshot.
-     */
     void finalize(Script &s, const fs::path &rootfs) const override;
     void normalize(Script &s, const fs::path &tree) const override;
     std::vector<std::string> image_excludes() const override;
@@ -107,10 +105,22 @@ public:
 
 private:
     std::string script(std::string_view name) const;
+
     /**
      * Run apt-get inside the tree.
      */
     void apt_get(Script &s, const fs::path &tree, std::vector<std::string> arguments) const;
+
+    /**
+     * Get the command line that runs bash `commands` inside the tree.
+     */
+    std::vector<std::string> chroot_command(const fs::path &tree, const std::string &commands) const;
+
+    /**
+     * Write the epoch marker that debuerreotype-chroot and debuerreotype-fixup
+     * read. Only a bootstrapped tree has it already.
+     */
+    void write_epoch_marker(Script &s, const fs::path &tree) const;
 
     fs::path m_scripts;
     Bootstrap m_bootstrap;
