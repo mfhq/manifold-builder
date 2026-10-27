@@ -135,14 +135,25 @@ def unpack(bundle: Path, runtimes: Path):
         archive.extractall(runtimes)
 
 
+def write_recipe(dir: Path, component: str, text: str) -> Path:
+    """Write the recipe of a component into `dir`, next to a copy of the test parts."""
+    shutil.copytree(DATA_DIR / 'parts', dir / 'parts', dirs_exist_ok=True)
+    recipe = dir / f'{component}.yaml'
+    recipe.write_text(text)
+    return recipe
+
+
+def build_core(builder, dir: Path):
+    """Build the test core in `dir`."""
+    return builder.build(
+        write_recipe(dir, 'com.example.testcore', CORE_RECIPE), dir / 'testcore.manifold'
+    )
+
+
 @pytest.fixture(scope='module')
 def core(builder, tmp_path_factory):
     """Build the test core once for all tests."""
-    work = tmp_path_factory.mktemp('core')
-    shutil.copytree(DATA_DIR / 'parts', work / 'parts')
-    recipe = work / 'com.example.testcore.yaml'
-    recipe.write_text(CORE_RECIPE)
-    return builder.build(recipe, work / 'testcore.manifold')
+    return build_core(builder, tmp_path_factory.mktemp('core'))
 
 
 @pytest.fixture(scope='module')
@@ -150,8 +161,7 @@ def platform(builder, core, tmp_path_factory):
     """Build the JPEG platform on the test core once for all tests."""
     dir = tmp_path_factory.mktemp('platform')
     unpack(core.path, dir / 'runtimes')
-    recipe = dir / 'com.example.testcore.jpeg.yaml'
-    recipe.write_text(PLATFORM_RECIPE)
+    recipe = write_recipe(dir, 'com.example.testcore.jpeg', PLATFORM_RECIPE)
     return builder.build(recipe, dir / 'jpeg.manifold', '--runtimes-dir', str(dir / 'runtimes'))
 
 
@@ -234,10 +244,7 @@ def test_core_sdk(core):
 
 
 def test_core_is_reproducible(builder, core, tmp_path):
-    shutil.copytree(DATA_DIR / 'parts', tmp_path / 'parts')
-    recipe = tmp_path / 'com.example.testcore.yaml'
-    recipe.write_text(CORE_RECIPE)
-    again = builder.build(recipe, tmp_path / 'testcore.manifold')
+    again = build_core(builder, tmp_path)
     for sdk in (False, True):
         first = core.manifest('core', sdk)['image']
         second = again.manifest('core', sdk)['image']
@@ -279,9 +286,7 @@ def test_app_on_platform(builder, core, platform, tmp_path):
     runtimes = tmp_path / 'runtimes'
     unpack(core.path, runtimes)
     unpack(platform.path, runtimes)
-    shutil.copytree(DATA_DIR / 'parts', tmp_path / 'parts')
-    recipe = tmp_path / 'com.example.Hello.yaml'
-    recipe.write_text(PLATFORM_APP_RECIPE)
+    recipe = write_recipe(tmp_path, 'com.example.Hello', PLATFORM_APP_RECIPE)
 
     bundle = builder.build(recipe, tmp_path / 'hello.manifold', '--runtimes-dir', str(runtimes))
 
@@ -303,14 +308,12 @@ def test_app_metainfo_file(builder, core, tmp_path):
     """Build an app whose recipe names a MetaInfo file, together with its SDK."""
     runtimes = tmp_path / 'runtimes'
     unpack(core.path, runtimes)
-    shutil.copytree(DATA_DIR / 'parts', tmp_path / 'parts')
     # the recipe's file replaces the one the app installs
     shipped = (DATA_DIR / 'parts/com.example.Hello.metainfo.xml').read_text()
     (tmp_path / 'hello.metainfo.xml').write_text(
         shipped.replace('Says hello', 'Says hello from the recipe')
     )
-    recipe = tmp_path / 'com.example.Hello.yaml'
-    recipe.write_text(METAINFO_APP_RECIPE)
+    recipe = write_recipe(tmp_path, 'com.example.Hello', METAINFO_APP_RECIPE)
 
     bundle = builder.build(recipe, tmp_path / 'hello.manifold', '--runtimes-dir', str(runtimes))
 

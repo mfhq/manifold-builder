@@ -89,9 +89,13 @@ class Builder:
             text=True,
         )
 
+    def _build(self, recipe: Path, output: Path, *args: str) -> subprocess.CompletedProcess:
+        """Run a build of a recipe from the directory it is in."""
+        return self.run('build', '--output', str(output), *args, str(recipe), cwd=recipe.parent)
+
     def build(self, recipe: Path, output: Path, *args: str) -> Bundle:
         """Build a recipe that must succeed, check the bundle and return it."""
-        result = self.run('build', '--output', str(output), *args, str(recipe), cwd=recipe.parent)
+        result = self._build(recipe, output, *args)
         if result.returncode != 0:
             pytest.fail(f'build of {recipe.name} failed:\n{result.stdout[-30000:]}')
         check = self.run('check', str(output))
@@ -99,6 +103,12 @@ class Builder:
         extract_dir = output.parent / (output.name + '.extracted')
         extract_dir.mkdir(exist_ok=True)
         return Bundle(output, extract_dir)
+
+    def build_fails(self, recipe: Path, output: Path, *args: str) -> str:
+        """Build a recipe that must fail, and return what the builder printed."""
+        result = self._build(recipe, output, *args)
+        assert result.returncode == 1, result.stdout
+        return result.stdout
 
 
 @pytest.fixture(scope='session', autouse=True)

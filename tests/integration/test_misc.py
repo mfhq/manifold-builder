@@ -30,9 +30,8 @@ def test_invalid_recipe(builder, tmp_path):
     """Print what is wrong with a recipe that can not be loaded."""
     recipe = tmp_path / 'broken.yaml'
     recipe.write_text(BROKEN_RECIPE)
-    result = builder.run('build', str(recipe))
-    assert result.returncode == 1
-    assert "'buildsystem' must be" in result.stdout
+    output = builder.build_fails(recipe, tmp_path / 'broken.manifold')
+    assert "'buildsystem' must be" in output
 
 
 def test_check_refuses_garbage(builder, tmp_path):
