@@ -87,6 +87,8 @@ TEST_CASE("Debian: generated commands", "[debian]")
     debian.install(install, "/tree", {"foo"});
     CHECK(install.text().find("--no-remove") != std::string::npos);
     CHECK(install.text().find("Dir::Cache::Archives=/" + debian.package_cache_dir()) != std::string::npos);
+    // the shared package cache belongs to us, not to apt's sandbox user
+    CHECK(install.text().find("APT::Sandbox::User=root") != std::string::npos);
     // debuerreotype empties apt's own archives directory after every dpkg run
     CHECK(debian.package_cache_dir() != "var/cache/apt/archives");
 }

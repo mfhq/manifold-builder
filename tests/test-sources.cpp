@@ -20,12 +20,13 @@ namespace
 {
 
 /**
- * Fetch a valid source into `destination`, with the scratch directory below `dir`.
+ * Fetch a valid source into `destination`, with the scratch and cache directories below `dir`.
  */
 SourceRecord fetch(const Source &source, const fs::path &destination, const TempDir &dir)
 {
     REQUIRE(check_source(source).empty());
-    return source_fetcher_for(source.type)->fetch(source, destination, {.dir = dir.path(), .scratch = dir / "scratch"});
+    return source_fetcher_for(source.type)
+        ->fetch(source, destination, {.dir = dir.path(), .scratch = dir / "scratch", .cache = dir / "cache"});
 }
 
 /**
@@ -110,7 +111,7 @@ TEST_CASE("Sources: dir leaves out work dirs and the output", "[sources]")
     auto record = source_fetcher_for("dir")->fetch(
         {.type = "dir", .path = "."},
         work / "sources/app",
-        {.dir = dir.path(), .scratch = work / "downloads", .skip = {work, dir / "app.manifold"}});
+        {.dir = dir.path(), .scratch = work / "fetch", .cache = work / "cache", .skip = {work, dir / "app.manifold"}});
 
     // the code and its documentation are there
     CHECK(read_file(work / "sources/app/README") == "hello\n");
@@ -149,6 +150,27 @@ TEST_CASE("Sources: file", "[sources]")
         // a wrong checksum fails
         Source wrong{.type = "file", .path = "launcher.sh", .sha256 = checksum_data_hex("other", ChecksumKind::Sha256)};
         CHECK_THROWS_AS(fetch(wrong, dir / "out", dir), BuildError);
+    }
+
+    SECTION("downloads are kept in the cache")
+    {
+        if (!find_tool("curl"))
+            SKIP("curl is not installed");
+
+        Source source{.type = "file", .url = "file://" + (dir / "launcher.sh").string(), .sha256 = sha256};
+        fetch(source, dir / "out", dir);
+        CHECK(read_file(dir / "cache/downloads" / sha256) == "#!/bin/sh\n");
+
+        // a later build needs no network
+        fs::remove(dir / "launcher.sh");
+        fetch(source, dir / "again", dir);
+        CHECK(read_file(dir / "again/launcher.sh") == "#!/bin/sh\n");
+
+        // a download that fails its checksum is not kept
+        write_file(dir / "launcher.sh", "changed\n");
+        Source changed{.type = "file", .url = source.url, .sha256 = checksum_data_hex("x", ChecksumKind::Sha256)};
+        CHECK_THROWS_AS(fetch(changed, dir / "changed", dir), BuildError);
+        CHECK(std::distance(fs::directory_iterator(dir / "cache/downloads"), {}) == 1);
     }
 }
 
@@ -245,6 +267,23 @@ TEST_CASE("Sources: git", "[sources]")
     CHECK(fs::exists(dir / "both/extra"));
     CHECK(fs::exists(dir / "both/README"));
 
+    // a commit the mirror has needs no origin
+    fs::rename(repo, dir / "moved");
+    auto pinned = fetch({.type = "git", .url = url, .commit = commit}, dir / "pinned", dir);
+    CHECK(pinned.pin() == commit);
+
+    // a newer commit is fetched into the mirror
+    fs::rename(dir / "moved", repo);
+    write_file(repo / "NEWS", "news\n");
+    git(repo, {"add", "NEWS"});
+    git(repo, {"commit", "--quiet", "-m", "news"});
+    auto latest = fetch({.type = "git", .url = url, .branch = "main"}, dir / "latest", dir);
+    CHECK(latest.pin() == git(repo, {"rev-parse", "HEAD"}));
+    CHECK(fs::exists(dir / "latest/NEWS"));
+
+    // the checkout's origin is the source, not the mirror
+    CHECK(run_capture({.argv = {"git", "-C", (dir / "latest").string(), "remote", "get-url", "origin"}}) == url);
+
     // a tag must point at the commit given with it
     Source mismatch{
         .type = "git", .url = url, .tag = "v1.0", .commit = checksum_data_hex("x", ChecksumKind::Sha256).substr(0, 40)};
@@ -265,7 +304,8 @@ TEST_CASE("Sources: parts", "[sources]")
     };
     Part no_sources{.name = "nothing", .buildsystem = "simple", .build_commands = {"true"}};
 
-    auto records = fetch_sources({&hello, &no_sources}, dir / "sources", dir / "scratch");
+    auto records = fetch_sources(
+        {&hello, &no_sources}, dir / "sources", {.scratch = dir / "scratch", .cache = dir / "cache"});
 
     REQUIRE(records.size() == 2);
     CHECK(records[0].part == "hello");
