@@ -15,6 +15,8 @@
 
 using namespace mfb;
 using mfb::test::APP_RECIPE;
+using mfb::test::CORE_BOOTSTRAP;
+using mfb::test::CORE_HEADER;
 using mfb::test::TempDir;
 
 namespace
@@ -163,15 +165,7 @@ libbar-dev
     // locales bring the packages that generate them
     write_file(dir / "none.txt", "");
     auto core = parse_recipe(
-        R"(type: core
-component: net.example.core
-version: 1
-name: Example Core
-summary: Core for the tests
-bootstrap: {suite: trixie, snapshot: '2026-10-04T00:00:00Z'}
-locales: [de_DE]
-packages: {apt: [fontconfig]}
-)",
+        std::string(CORE_HEADER) + std::string(CORE_BOOTSTRAP) + "locales: [de_DE]\npackages: {apt: [fontconfig]}\n",
         "inline");
     CHECK(
         debian.packages_request_runtime(core, dir / "none.txt")

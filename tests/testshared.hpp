@@ -122,4 +122,30 @@ parts:
   buildsystem: meson
 )";
 
+/**
+ * Start of a core recipe, which still needs CORE_BOOTSTRAP to be valid.
+ */
+constexpr std::string_view CORE_HEADER = R"(type: core
+component: net.example.core
+version: 1
+name: Example Core
+summary: Core for the tests
+)";
+
+/**
+ * A bootstrap section for CORE_HEADER.
+ */
+constexpr std::string_view CORE_BOOTSTRAP = "bootstrap: {suite: trixie, snapshot: '2026-10-04T00:00:00Z'}\n";
+
+/**
+ * Start of a valid platform recipe that tests append keys to.
+ */
+constexpr std::string_view PLATFORM_HEADER = R"(type: platform
+component: net.example.platform
+version: 1
+name: Example Platform
+summary: Platform for the tests
+base: net.example.core
+)";
+
 } // namespace mfb::test

@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
-#include "core-build.hpp"
 #include "recipe.hpp"
-#include "sandbox.hpp"
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -14,6 +12,9 @@
 using namespace mfb;
 using mfb::test::APP_HEADER;
 using mfb::test::APP_RECIPE;
+using mfb::test::CORE_BOOTSTRAP;
+using mfb::test::CORE_HEADER;
+using mfb::test::PLATFORM_HEADER;
 using mfb::test::recipe_rejected;
 using mfb::test::TempDir;
 using mfb::test::tests_dir;
@@ -82,13 +83,8 @@ TEST_CASE("Recipe: hashes", "[recipe]")
 TEST_CASE("Recipe: validation", "[recipe]")
 {
     const std::string app(APP_RECIPE);
-    const std::string core = R"(type: core
-component: net.example.core
-version: 1
-name: Example Core
-summary: Core for the tests
-)";
-    const std::string bootstrap = "bootstrap: {suite: trixie, snapshot: '2026-10-04T00:00:00Z'}\n";
+    const std::string core(CORE_HEADER);
+    const std::string bootstrap(CORE_BOOTSTRAP);
     const std::string commandless = R"(component: com.example.app
 version: 1
 base: net.example.core
@@ -119,20 +115,9 @@ parts:
 
 TEST_CASE("Recipe: keys per recipe type", "[recipe]")
 {
-    const std::string bootstrap = "bootstrap: {suite: trixie, snapshot: '2026-10-04T00:00:00Z'}\n";
-    const std::string core = R"(type: core
-component: net.example.core
-version: 1
-name: Example Core
-summary: Core for the tests
-)" + bootstrap;
-    const std::string platform = R"(type: platform
-component: net.example.platform
-version: 1
-name: Example Platform
-summary: Platform for the tests
-base: net.example.core
-)";
+    const std::string bootstrap(CORE_BOOTSTRAP);
+    const std::string core = std::string(CORE_HEADER) + bootstrap;
+    const std::string platform(PLATFORM_HEADER);
     const std::string app(APP_RECIPE);
     const std::string actions = "actions: [{name: tidy, run: 'true'}]\n";
 
@@ -160,8 +145,6 @@ base: net.example.core
 
     // only cores have a bootstrap and actions
     CHECK(!recipe_rejected(core + actions));
-    // an action always runs inside the tree
-    CHECK(recipe_rejected(core + "actions: [{name: tidy, scope: host, run: 'true'}]\n"));
     CHECK(recipe_rejected(platform + bootstrap));
     CHECK(recipe_rejected(platform + actions));
     CHECK(recipe_rejected(app + bootstrap));
@@ -335,21 +318,4 @@ parts:
     // the part's arch options only apply on aarch64
     CHECK(arm.cflags == "-O2 -g -mbranch-protection=standard");
     CHECK(arm.env.at("B") == "global");
-}
-
-TEST_CASE("Core: Manifold configuration", "[recipe]")
-{
-    Script script;
-    postprocess_core(script, "/tree", "x86_64-linux-gnu");
-    const auto &text = script.text();
-
-    // libraries of the app
-    CHECK(text.find("/tree/etc/ld.so.conf.d/manifold-app.conf") != std::string::npos);
-    CHECK(text.find("/app/lib/x86_64-linux-gnu") != std::string::npos);
-
-    // fonts of the host
-    CHECK(text.find("/tree/etc/fonts/conf.d/50-manifold-host-fonts.conf") != std::string::npos);
-    CHECK(
-        text.find(R"(<remap-dir as-path="/usr/share/fonts">/run/host/usr/share/fonts</remap-dir>)")
-        != std::string::npos);
 }

@@ -48,7 +48,6 @@ void write_core(
     auto manifest = test::fake_manifest(sdk ? "net.example.core.sdk" : "net.example.core", "core");
     manifest.version = version;
     manifest.revision = revision;
-    manifest.architecture = "amd64";
     manifest.sdk = sdk;
     manifest.identity = checksum_data_hex(sdk ? "sdk-identity" : "core-identity", ChecksumKind::Sha256);
     manifest.content_hash = checksum_data_hex(version + build + (sdk ? "-sdk" : ""), ChecksumKind::Sha256);
@@ -62,7 +61,7 @@ void write_core(
             .content_hash = checksum_data_hex(version + build, ChecksumKind::Sha256),
         };
 
-    auto stem = std::format("{}_{}-{}_amd64", manifest.component, version, revision);
+    auto stem = std::format("{}_{}-{}_x86-64", manifest.component, version, revision);
     manifest.image = image_of(dir, stem + ".raw");
     write_manifest(manifest, dir / (stem + ".manifold.json"));
 }
@@ -108,10 +107,9 @@ fs::path install_layer(
     const fs::path &store,
     const std::string &component,
     const std::string &full_version,
-    const std::string &architecture,
     const std::string &base = "")
 {
-    auto stem = std::format("{}_{}_{}", component, full_version, architecture);
+    auto stem = std::format("{}_{}_x86-64", component, full_version);
     auto manifest = manifest_from_json(read_file(dir / (stem + ".manifold.json")), "");
     auto image = store / "images/by-verity" / (manifest.image->verity_root_hash + ".raw");
     auto version_dir = store / "runtimes" / component / full_version;
@@ -142,21 +140,22 @@ TEST_CASE("Store: finding the base of a build", "[store]")
     }
     write_core(dir, "12.10", false, 2);
     write_core(dir, "12.10", true, 2);
-
-    // the newest version satisfying the minimum wins, with its newest revision: 12.10 is newer than 12.2
-    auto core = find_stack(dir, "net.example.core", "12.2").core;
-    CHECK(core.runtime.version == "12.10");
-    CHECK(core.runtime_image.filename() == "net.example.core_12.10-2_amd64.raw");
-    CHECK(core.sdk_image.filename() == "net.example.core.sdk_12.10-2_amd64.raw");
-    // no version is new enough
-    CHECK_THROWS_AS(find_stack(dir, "net.example.core", "14"), BuildError);
-
-    // a platform uses the exact core it was built on
+    // a platform built on core 12.2
     write_platform(dir, false);
     write_platform(dir, true);
     // a newer build of the core version the platform was built on
     write_core(dir, "12.2", false, 2, "rebuilt");
     write_core(dir, "12.2", true, 2, "rebuilt");
+
+    // the newest version satisfying the minimum wins, with its newest revision: 12.10 is newer than 12.2
+    auto core = find_stack(dir, "net.example.core", "12.2").core;
+    CHECK(core.runtime.version == "12.10");
+    CHECK(core.runtime_image.filename() == "net.example.core_12.10-2_x86-64.raw");
+    CHECK(core.sdk_image.filename() == "net.example.core.sdk_12.10-2_x86-64.raw");
+    // no version is new enough
+    CHECK_THROWS_AS(find_stack(dir, "net.example.core", "14"), BuildError);
+
+    // a platform uses the exact core it was built on
     auto on_platform = find_stack(dir, "net.example.platform", "");
     REQUIRE(on_platform.platform);
     CHECK(on_platform.base().runtime.component == "net.example.platform");
@@ -168,8 +167,8 @@ TEST_CASE("Store: finding the base of a build", "[store]")
 
     // an installed store is read like Manifold does
     auto store = dir / "store";
-    auto core_image = install_layer(dir, store, "net.example.core", "12.2-1", "amd64");
-    auto sdk_image = install_layer(dir, store, "net.example.core.sdk", "12.2-1", "amd64");
+    auto core_image = install_layer(dir, store, "net.example.core", "12.2-1");
+    auto sdk_image = install_layer(dir, store, "net.example.core.sdk", "12.2-1");
     auto installed = find_stack(store, "net.example.core", "12.1").core;
     CHECK(installed.runtime.version == "12.2");
     CHECK(installed.runtime_image == core_image);
@@ -179,9 +178,8 @@ TEST_CASE("Store: finding the base of a build", "[store]")
     CHECK_THROWS_AS(find_stack(store, "net.example.core", "12.3"), BuildError);
 
     // an installed platform uses the core its base link points to
-    install_layer(dir, store, "net.example.platform", "20260117.0900-0", "x86-64", "net.example.core/12.2-1");
-    install_layer(
-        dir, store, "net.example.platform.sdk", "20260117.0900-0", "x86-64", "net.example.platform/20260117.0900-0");
+    install_layer(dir, store, "net.example.platform", "20260117.0900-0", "net.example.core/12.2-1");
+    install_layer(dir, store, "net.example.platform.sdk", "20260117.0900-0", "net.example.platform/20260117.0900-0");
     auto installed_platform = find_stack(store, "net.example.platform", "");
     REQUIRE(installed_platform.platform);
     CHECK(installed_platform.base().runtime.component == "net.example.platform");

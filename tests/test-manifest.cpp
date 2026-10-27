@@ -108,24 +108,24 @@ TEST_CASE("Identity: hashes of a package set", "[hashes]")
     InstalledPackages upgraded = {{"apt", "3.0.4"}, {"zlib1g", "1:1.3.1-1"}};
     InstalledPackages added = {{"apt", "3.0.3"}, {"bash", "5.2"}, {"zlib1g", "1:1.3.1-1"}};
 
-    auto identity = identity_hash(core, "amd64", packages);
+    auto identity = identity_hash(core, "x86_64", packages);
 
     // versions do not change the identity, the package set and architecture do
-    CHECK(identity == identity_hash(core, "amd64", upgraded));
-    CHECK(identity != identity_hash(core, "amd64", added));
+    CHECK(identity == identity_hash(core, "x86_64", upgraded));
+    CHECK(identity != identity_hash(core, "x86_64", added));
     CHECK(identity != identity_hash(core, "arm64", packages));
 
     // the hashed text, to notice format changes
     CHECK(
         identity
         == checksum_data_hex(
-            "manifold-identity/1\nbase: net.debian.core13\narchitecture: amd64\napt\nzlib1g\n", ChecksumKind::Blake3));
+            "manifold-identity/1\nbase: net.debian.core13\narchitecture: x86_64\napt\nzlib1g\n", ChecksumKind::Blake3));
 
-    auto content = content_hash(core, "amd64", core, "13.1", packages);
+    auto content = content_hash(core, "x86_64", core, "13.1", packages);
 
     // the content hash covers versions and extra lines
-    CHECK(content != content_hash(core, "amd64", core, "13.1", upgraded));
-    CHECK(content != content_hash(core, "amd64", core, "13.1", packages, {"recipe: x"}));
+    CHECK(content != content_hash(core, "x86_64", core, "13.1", upgraded));
+    CHECK(content != content_hash(core, "x86_64", core, "13.1", packages, {"recipe: x"}));
 }
 
 TEST_CASE("Identity: directory tree hashes", "[hashes]")
@@ -233,9 +233,10 @@ TEST_CASE("MetaInfo: generated documents", "[metainfo]")
     CHECK(xml.find("Second &lt;paragraph&gt;") != std::string::npos);
     // only the MetaInfo in the bundle names the image to install
     CHECK(xml.find("manifold.id") == std::string::npos);
-    for (const auto &problem : validate_metainfo(xml))
+    auto problems = validate_metainfo(xml);
+    for (const auto &problem : problems)
         UNSCOPED_INFO("validator: " << problem.text);
-    CHECK(validate_metainfo(xml).empty());
+    CHECK(problems.empty());
 
     // a runtime extends nothing
     MetaInfo runtime = sdk;
@@ -244,9 +245,10 @@ TEST_CASE("MetaInfo: generated documents", "[metainfo]")
     runtime.extends.clear();
     auto runtime_xml = generate_metainfo(runtime);
     CHECK(runtime_xml.find("type=\"runtime\"") != std::string::npos);
-    for (const auto &problem : validate_metainfo(runtime_xml))
+    auto runtime_problems = validate_metainfo(runtime_xml);
+    for (const auto &problem : runtime_problems)
         UNSCOPED_INFO("validator: " << problem.text);
-    CHECK(validate_metainfo(runtime_xml).empty());
+    CHECK(runtime_problems.empty());
 }
 
 TEST_CASE("MetaInfo: errors and warnings of the validator", "[metainfo]")
