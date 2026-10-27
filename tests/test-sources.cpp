@@ -7,6 +7,7 @@
 #include "checksum.hpp"
 #include "identity.hpp"
 #include "process.hpp"
+#include "scopeguard.hpp"
 #include "sources/source.hpp"
 #include "testshared.hpp"
 
@@ -62,15 +63,18 @@ TEST_CASE("Sources: dir", "[sources]")
     SECTION("modes and times are kept")
     {
         fs::permissions(dir / "project/src", fs::perms::owner_write, fs::perm_options::remove);
+        // give the write bit back, or the directories can not be removed
+        ScopeGuard restore_write([&] {
+            std::error_code ignored;
+            fs::permissions(dir / "project/src", fs::perms::owner_write, fs::perm_options::add, ignored);
+            fs::permissions(dir / "copied/src", fs::perms::owner_write, fs::perm_options::add, ignored);
+        });
+
         auto copied = fetch({.type = "dir", .path = "project"}, dir / "copied", dir);
 
         CHECK((fs::status(dir / "copied/src").permissions() & fs::perms::owner_write) == fs::perms::none);
         CHECK(fs::last_write_time(dir / "copied/src/main.c") == fs::last_write_time(dir / "project/src/main.c"));
         CHECK(copied.pin() == record.pin());
-
-        // give the write bit back, or the directories can not be removed
-        fs::permissions(dir / "project/src", fs::perms::owner_write, fs::perm_options::add);
-        fs::permissions(dir / "copied/src", fs::perms::owner_write, fs::perm_options::add);
     }
 
     SECTION("hidden files are left out, so git does not change the hash")
