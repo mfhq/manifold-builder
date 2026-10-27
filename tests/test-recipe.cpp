@@ -180,6 +180,9 @@ TEST_CASE("Recipe: part validation", "[recipe][parts]")
 {
     const std::string app(APP_HEADER);
 
+    // the build's HOME and DESTDIR are next to the sources
+    CHECK(recipe_rejected(app + "parts: [{name: home, buildsystem: simple, build-commands: ['true']}]\n"));
+    CHECK(recipe_rejected(app + "parts: [{name: _install, buildsystem: simple, build-commands: ['true']}]\n"));
     // the name becomes a directory
     CHECK(recipe_rejected(app + "parts: [{name: a/b, buildsystem: meson}]\n"));
     // used twice

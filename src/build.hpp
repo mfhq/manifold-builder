@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <map>
 #include <memory>
 #include <optional>
@@ -273,5 +274,16 @@ private:
     fs::path make_images();
     void cleanup_work_dir();
 };
+
+/**
+ * Remove the downloads, git mirrors and packages from `cache` that no build
+ * has used for `unused`.
+ *
+ * Builds touch the downloads and mirrors they use. For packages the access
+ * time counts as well, since apt reads them itself. Mirrors locked by another
+ * build are kept.
+ * Returns the number of removed entries.
+ */
+size_t prune_cache(const fs::path &cache, std::chrono::seconds unused);
 
 } // namespace mfb
