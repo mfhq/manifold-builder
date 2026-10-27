@@ -370,8 +370,9 @@ private:
 
     Manifest describe_app(bool sdk) const
     {
-        auto manifest = manifest_for(
-            m_recipe.component + (sdk ? ".sdk" : ""), "app", m_recipe.version, sdk, m_kit_packages);
+        // like every SDK, the app's lists the packages it builds against
+        const auto &packages = sdk ? m_sdk_packages : m_kit_packages;
+        auto manifest = manifest_for(m_recipe.component + (sdk ? ".sdk" : ""), "app", m_recipe.version, sdk, packages);
         // recipe, sources and metainfo go into the content hash
         std::vector<std::string> extra = {"recipe: " + m_recipe.hash};
         auto sources = source_lines();
@@ -380,7 +381,7 @@ private:
             extra.push_back(
                 "metainfo: " + checksum_file_hex(m_recipe_dir / *m_recipe.metainfo_file, ChecksumKind::Blake3));
         manifest.content_hash = content_hash(
-            m_recipe.base, m_architecture, manifest.component, m_recipe.version, m_kit_packages, extra);
+            m_recipe.base, m_architecture, manifest.component, m_recipe.version, packages, extra);
         // an app is one exact build and never shared like a kit
         manifest.identity = manifest.content_hash;
         manifest.base = sdk ? output("kit-sdk").manifest.as_base() : output("kit").manifest.as_base();
