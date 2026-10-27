@@ -6,8 +6,8 @@
 
 #pragma once
 
+#include "checksum.hpp"
 #include "error.hpp"
-#include "identity.hpp"
 #include "manifest.hpp"
 #include "recipe.hpp"
 #include "utils.hpp"

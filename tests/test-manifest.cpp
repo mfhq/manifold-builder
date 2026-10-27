@@ -5,6 +5,7 @@
  */
 
 #include "appstream.hpp"
+#include "checksum.hpp"
 #include "identity.hpp"
 #include "image.hpp"
 #include "manifest.hpp"
@@ -74,6 +75,17 @@ TEST_CASE("Checksum: files and data", "[hashes]")
         == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     CHECK(checksum_file_hex(dir / "empty", ChecksumKind::Blake3) == EMPTY_BLAKE3);
     CHECK(checksum_data_hex("", ChecksumKind::Blake3) == EMPTY_BLAKE3);
+
+    // a large file is hashed in chunks, with both digests at once
+    const std::string data(3 << 20, 'x');
+    write_file(dir / "large", data);
+    auto both = checksum_file(dir / "large");
+    CHECK(both.blake3 == checksum_file_hex(dir / "large", ChecksumKind::Blake3));
+    CHECK(both.sha256 == checksum_file_hex(dir / "large", ChecksumKind::Sha256));
+    CHECK(both.sha256 == checksum_data_hex(data, ChecksumKind::Sha256));
+
+    // a directory is refused
+    CHECK_THROWS_AS(checksum_file(dir.path()), BuildError);
 }
 
 TEST_CASE("Image: UUID and systemd architecture names", "[image]")
