@@ -66,6 +66,24 @@ private:
 };
 
 /**
+ * Write a fake image file to `dir` and describe it with hashes that Manifold accepts.
+ */
+inline ImageFile fake_image(const fs::path &dir, const std::string &file)
+{
+    write_file(dir / file, "not really an image");
+    return ImageFile{
+        .file = file,
+        .size = fs::file_size(dir / file),
+        .blake3 = checksum_file_hex(dir / file, ChecksumKind::Blake3),
+        .sha256 = checksum_file_hex(dir / file, ChecksumKind::Sha256),
+        // a store keeps its images by verity hash, so each one needs its own
+        .verity_root_hash = checksum_data_hex("verity " + file, ChecksumKind::Sha256),
+        .data_offset = 1,
+        .hash_offset = 2,
+    };
+}
+
+/**
  * Create a manifest of version 1, revision 1 for x86_64, with hashes made from the name.
  */
 inline Manifest fake_manifest(const std::string &component, const std::string &kind)

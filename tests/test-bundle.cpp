@@ -66,17 +66,8 @@ fs::path make_test_bundle(const fs::path &dir, const std::optional<fs::path> &ke
 </components>
 )";
 
-    write_file(dir / "core.raw", "not really an image");
     auto manifest = test::fake_manifest("net.example.core", "core");
-    manifest.image = ImageFile{
-        .file = "core.raw",
-        .size = fs::file_size(dir / "core.raw"),
-        .blake3 = checksum_file_hex(dir / "core.raw", ChecksumKind::Blake3),
-        .sha256 = checksum_file_hex(dir / "core.raw", ChecksumKind::Sha256),
-        .verity_root_hash = checksum_data_hex("verity", ChecksumKind::Sha256),
-        .data_offset = 1,
-        .hash_offset = 2,
-    };
+    manifest.image = test::fake_image(dir, "core.raw");
     write_manifest(manifest, dir / "core.manifold.json");
     write_file(dir / "catalog.xml", catalog);
 

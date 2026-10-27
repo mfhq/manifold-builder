@@ -10,7 +10,6 @@
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <fstream>
 
 using namespace mfb;
 using mfb::test::TempDir;
@@ -19,84 +18,39 @@ namespace
 {
 
 /**
- * Write a fake image file to `dir` and describe it with made-up hashes that still look valid, so Manifold accepts it.
+ * Write the manifests and fake images of a layer and its SDK to `dir`, with `build` telling rebuilds apart.
  */
-ImageFile image_of(const fs::path &dir, const std::string &file)
-{
-    std::ofstream(dir / file) << "not really an image";
-    return ImageFile{
-        .file = file,
-        .size = fs::file_size(dir / file),
-        .blake3 = checksum_file_hex(dir / file, ChecksumKind::Blake3),
-        .sha256 = checksum_file_hex(dir / file, ChecksumKind::Sha256),
-        .verity_root_hash = checksum_data_hex("verity " + file, ChecksumKind::Sha256),
-        .data_offset = 1048576,
-        .hash_offset = 2097152,
-    };
-}
-
-/**
- * Write the manifest and fake image of a core or its SDK to `dir`, with `build` telling rebuilds apart.
- */
-void write_core(
+BaseRef write_layer(
     const fs::path &dir,
+    const std::string &component,
+    const std::string &kind,
     const std::string &version,
-    bool sdk,
-    int64_t revision = 1,
-    const std::string &build = "")
+    int64_t revision,
+    const std::string &build = "",
+    const std::optional<BaseRef> &base = std::nullopt)
 {
-    auto manifest = test::fake_manifest(sdk ? "net.example.core.sdk" : "net.example.core", "core");
-    manifest.version = version;
-    manifest.revision = revision;
-    manifest.sdk = sdk;
-    manifest.identity = checksum_data_hex(sdk ? "sdk-identity" : "core-identity", ChecksumKind::Sha256);
-    manifest.content_hash = checksum_data_hex(version + build + (sdk ? "-sdk" : ""), ChecksumKind::Sha256);
+    BaseRef runtime;
+    for (bool sdk : {false, true}) {
+        auto manifest = test::fake_manifest(component + (sdk ? ".sdk" : ""), kind);
+        manifest.version = version;
+        manifest.revision = revision;
+        manifest.sdk = sdk;
+        manifest.content_hash = checksum_data_hex(manifest.component + version + build, ChecksumKind::Sha256);
 
-    // an SDK is layered on its own runtime
-    if (sdk)
-        manifest.base = BaseRef{
-            .component = "net.example.core",
-            .version = version,
-            .identity = checksum_data_hex("core-identity", ChecksumKind::Sha256),
-            .content_hash = checksum_data_hex(version + build, ChecksumKind::Sha256),
-        };
+        // an SDK is layered on its own runtime
+        if (sdk)
+            manifest.base = runtime;
+        else if (base)
+            manifest.base = base;
 
-    auto stem = std::format("{}_{}-{}_x86-64", manifest.component, version, revision);
-    manifest.image = image_of(dir, stem + ".raw");
-    write_manifest(manifest, dir / (stem + ".manifold.json"));
-}
+        auto stem = std::format("{}_{}-{}_x86-64", manifest.component, version, revision);
+        manifest.image = test::fake_image(dir, stem + ".raw");
+        write_manifest(manifest, dir / (stem + ".manifold.json"));
 
-/**
- * Write the manifest and fake image of a platform built on core 12.2, or of its SDK, to `dir`.
- */
-void write_platform(const fs::path &dir, bool sdk)
-{
-    auto manifest = test::fake_manifest(sdk ? "net.example.platform.sdk" : "net.example.platform", "platform");
-    manifest.version = "20260117.0900";
-    manifest.revision = 0;
-    manifest.sdk = sdk;
-    manifest.identity = checksum_data_hex("platform-identity", ChecksumKind::Sha256);
-    manifest.content_hash = checksum_data_hex(sdk ? "p-sdk" : "p", ChecksumKind::Sha256);
-
-    // an SDK is layered on its own runtime
-    if (sdk)
-        manifest.base = BaseRef{
-            .component = "net.example.platform",
-            .version = manifest.version,
-            .identity = checksum_data_hex("platform-identity", ChecksumKind::Sha256),
-            .content_hash = checksum_data_hex("p", ChecksumKind::Sha256),
-        };
-    else
-        manifest.base = BaseRef{
-            .component = "net.example.core",
-            .version = "12.2",
-            .identity = checksum_data_hex("core-identity", ChecksumKind::Sha256),
-            .content_hash = checksum_data_hex("12.2", ChecksumKind::Sha256),
-        };
-
-    auto stem = std::format("{}_{}-0_x86-64", manifest.component, manifest.version);
-    manifest.image = image_of(dir, stem + ".raw");
-    write_manifest(manifest, dir / (stem + ".manifold.json"));
+        if (!sdk)
+            runtime = manifest.as_base();
+    }
+    return runtime;
 }
 
 /**
@@ -134,18 +88,14 @@ TEST_CASE("Store: finding the base of a build", "[store]")
     const auto &dir = tmp.path();
 
     // a directory of extracted bundles, with several versions and revisions of a core
-    for (auto version : {"12.1a", "12.2", "12.10"}) {
-        write_core(dir, version, false);
-        write_core(dir, version, true);
-    }
-    write_core(dir, "12.10", false, 2);
-    write_core(dir, "12.10", true, 2);
+    write_layer(dir, "net.example.core", "core", "12.1a", 1);
+    auto core_ref = write_layer(dir, "net.example.core", "core", "12.2", 1);
+    write_layer(dir, "net.example.core", "core", "12.10", 1);
+    write_layer(dir, "net.example.core", "core", "12.10", 2);
     // a platform built on core 12.2
-    write_platform(dir, false);
-    write_platform(dir, true);
+    write_layer(dir, "net.example.platform", "platform", "20260117.0900", 0, "", core_ref);
     // a newer build of the core version the platform was built on
-    write_core(dir, "12.2", false, 2, "rebuilt");
-    write_core(dir, "12.2", true, 2, "rebuilt");
+    write_layer(dir, "net.example.core", "core", "12.2", 2, "rebuilt");
 
     // the newest version satisfying the minimum wins, with its newest revision: 12.10 is newer than 12.2
     auto core = find_stack(dir, "net.example.core", "12.2").core;
