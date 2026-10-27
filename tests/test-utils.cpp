@@ -135,6 +135,25 @@ TEST_CASE("Utils: file errors", "[utils]")
         CHECK_THROWS_WITH(write_file("/dev/full", "x"), ContainsSubstring("No space left"));
 }
 
+TEST_CASE("Utils: FileLock", "[utils]")
+{
+    TempDir dir("lock");
+    {
+        FileLock held(dir / "file.lock");
+        CHECK(!FileLock::try_lock(dir / "file.lock"));
+    }
+    // free again once the holder is gone
+    CHECK(FileLock::try_lock(dir / "file.lock"));
+
+    // a directory is locked itself
+    auto work = FileLock::try_lock(dir.path());
+    REQUIRE(work);
+    CHECK(!FileLock::try_lock(dir.path()));
+
+    // the directory of a lock file has to exist
+    CHECK_THROWS_AS(FileLock(dir / "missing/file.lock"), BuildError);
+}
+
 TEST_CASE("Process: programs that can not be started", "[process]")
 {
     TempDir dir("spawn");

@@ -10,10 +10,9 @@
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <ctime>
 #include <fcntl.h>
-#include <sys/file.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
 using namespace mfb;
 using mfb::test::TempDir;
@@ -63,12 +62,9 @@ TEST_CASE("Build: pruning the cache", "[build]")
     fs::create_directories(cache / "git/new.git/objects");
 
     // another build is using this mirror
-    int lock = open((cache / "git/busy.git.lock").c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
-    REQUIRE(lock >= 0);
-    REQUIRE(flock(lock, LOCK_EX) == 0);
+    FileLock busy(cache / "git/busy.git.lock");
 
     CHECK(prune_cache(cache, std::chrono::days(30)) == 4);
-    close(lock);
 
     // unused entries are gone
     CHECK(!fs::exists(cache / "downloads/old"));
