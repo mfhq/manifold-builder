@@ -380,8 +380,8 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
 
     if (!recipe.is_core() && !recipe.actions.empty())
         problem(
-            "'actions' is only allowed in a core recipe: platforms and kits only install packages, and apps "
-            "install into /app with parts");
+            "'actions' is only allowed in a core recipe: the layers above a core change their trees only with "
+            "packages and parts");
     for (const auto &action : recipe.actions) {
         if (action.run.empty())
             problem(std::format("Action '{}' has nothing to run", action.name));

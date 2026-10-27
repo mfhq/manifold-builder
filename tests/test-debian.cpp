@@ -171,6 +171,11 @@ libbar-dev
         debian.packages_request_runtime(core, dir / "none.txt")
         == std::vector<std::string>{"fontconfig", "libc-l10n", "locales"});
 
+    // debug symbols go to the SDK, both old-style and automatic ones
+    CHECK(debian.is_development_package(app, "libc6-dbg"));
+    CHECK(debian.is_development_package(app, "libfoo1-dbgsym"));
+    CHECK(!debian.is_development_package(app, "fontconfig"));
+
     // packages of another package system are refused
     auto fedora = parse_recipe(std::string(APP_RECIPE) + "packages: {dnf: [foo-devel]}\n", "inline");
     CHECK_NOTHROW(debian.check_packages(app));
