@@ -11,9 +11,11 @@
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <manifold.h>
 
 using namespace mfb;
+using Catch::Matchers::ContainsSubstring;
 using mfb::test::APP_RECIPE;
 using mfb::test::CORE_BOOTSTRAP;
 using mfb::test::CORE_HEADER;
@@ -72,24 +74,24 @@ TEST_CASE("Debian: generated commands", "[debian]")
     // the slim configuration keeps the catalogs of the locales
     Script slim;
     debian.slimify(slim, "/tree", {"de_DE", "pt_BR"});
-    CHECK(slim.text().find("path-include /usr/share/locale/de/*") != std::string::npos);
-    CHECK(slim.text().find("path-include /usr/share/locale/pt_BR/*") != std::string::npos);
-    CHECK(slim.text().find("! -name de_DE") != std::string::npos);
-    CHECK(slim.text().find("path-exclude /usr/share/man/*") != std::string::npos);
+    CHECK_THAT(slim.text(), ContainsSubstring("path-include /usr/share/locale/de/*"));
+    CHECK_THAT(slim.text(), ContainsSubstring("path-include /usr/share/locale/pt_BR/*"));
+    CHECK_THAT(slim.text(), ContainsSubstring("! -name de_DE"));
+    CHECK_THAT(slim.text(), ContainsSubstring("path-exclude /usr/share/man/*"));
 
     // commands in a tree run without questions
     Script command;
     debian.run_in_tree(command, "/tree", "apt-get install -y foo");
-    CHECK(command.text().find("DEBIAN_FRONTEND=noninteractive") != std::string::npos);
-    CHECK(command.text().find("umask 022") != std::string::npos);
+    CHECK_THAT(command.text(), ContainsSubstring("DEBIAN_FRONTEND=noninteractive"));
+    CHECK_THAT(command.text(), ContainsSubstring("umask 022"));
 
     // packages install from the shared cache without removing anything
     Script install;
     debian.install(install, "/tree", {"foo"});
-    CHECK(install.text().find("--no-remove") != std::string::npos);
-    CHECK(install.text().find("Dir::Cache::Archives=/" + debian.package_cache_dir()) != std::string::npos);
+    CHECK_THAT(install.text(), ContainsSubstring("--no-remove"));
+    CHECK_THAT(install.text(), ContainsSubstring("Dir::Cache::Archives=/" + debian.package_cache_dir()));
     // the shared package cache belongs to us, not to apt's sandbox user
-    CHECK(install.text().find("APT::Sandbox::User=root") != std::string::npos);
+    CHECK_THAT(install.text(), ContainsSubstring("APT::Sandbox::User=root"));
     // debuerreotype empties apt's own archives directory after every dpkg run
     CHECK(debian.package_cache_dir() != "var/cache/apt/archives");
 }

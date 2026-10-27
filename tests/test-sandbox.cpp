@@ -18,6 +18,16 @@ using mfb::test::TempDir;
 namespace
 {
 
+const bool QUIET = true; ///< Hide the errors of a script that is meant to fail
+
+/**
+ * Run a script directly and return its exit status.
+ */
+int run_script(const Script &script, bool quiet = false)
+{
+    return run_status({.argv = {"bash", "-c", script.text()}, .quiet = quiet});
+}
+
 /**
  * Run a script like Sandbox::run does, minus the namespace, and describe
  * its failure.
@@ -126,7 +136,7 @@ TEST_CASE("Sandbox: strip_overlay_markers", "[sandbox]")
 
     SECTION("the markers are removed from the marked directories")
     {
-        CHECK(run_status({.argv = {"bash", "-c", script.text()}}) == 0);
+        CHECK(run_script(script) == 0);
 
         CHECK(!marked(dir / "usr/lib", "user.overlay.opaque"));
         CHECK(!marked(dir / "with space", "user.overlay.opaque"));
@@ -142,7 +152,7 @@ TEST_CASE("Sandbox: strip_overlay_markers", "[sandbox]")
         fs::create_directories(dir / "locked");
         REQUIRE(mark(dir / "locked", "user.overlay.opaque"));
         fs::permissions(dir / "locked", fs::perms::owner_write, fs::perm_options::remove);
-        CHECK(run_status({.argv = {"bash", "-c", script.text()}, .quiet = true}) != 0);
+        CHECK(run_script(script, QUIET) != 0);
         fs::permissions(dir / "locked", fs::perms::owner_write, fs::perm_options::add);
     }
 }
@@ -170,7 +180,7 @@ TEST_CASE("Sandbox: move_paths", "[sandbox]")
         // the shell options and the directory are the script's own again
         script.line("! shopt -q globstar && ! shopt -q nullglob && [ \"$PWD\" = " + cwd + " ]");
 
-        CHECK(run_status({.argv = {"bash", "-c", script.text()}}) == 0);
+        CHECK(run_script(script) == 0);
 
         // everything listed is in the SDK now
         CHECK(fs::exists(dir / "sdk/usr/include/foo/foo.h"));
@@ -189,7 +199,7 @@ TEST_CASE("Sandbox: move_paths", "[sandbox]")
         write_file(dir / "file", "");
         move_paths(script, tree, "usr", {"include"}, dir / "file/sdk");
 
-        CHECK(run_status({.argv = {"bash", "-c", script.text()}, .quiet = true}) != 0);
+        CHECK(run_script(script, QUIET) != 0);
         CHECK(fs::exists(tree / "usr/include"));
     }
 }
@@ -209,7 +219,7 @@ TEST_CASE("Sandbox: merge_into_usr", "[sandbox]")
     Script script;
     merge_into_usr(script, dir.path());
 
-    CHECK(run_status({.argv = {"bash", "-c", script.text()}}) == 0);
+    CHECK(run_script(script) == 0);
 
     // directories were merged into their /usr counterparts
     CHECK(fs::exists(dir / "usr/lib/udev/rules.d/60-foo.rules"));

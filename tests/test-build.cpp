@@ -10,11 +10,13 @@
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <ctime>
 #include <fcntl.h>
 #include <sys/stat.h>
 
 using namespace mfb;
+using Catch::Matchers::ContainsSubstring;
 using mfb::test::TempDir;
 
 namespace
@@ -92,12 +94,11 @@ TEST_CASE("Core: Manifold configuration", "[build][core]")
     const auto &text = script.text();
 
     // libraries of the app
-    CHECK(text.find("/tree/etc/ld.so.conf.d/manifold-app.conf") != std::string::npos);
-    CHECK(text.find("/app/lib/x86_64-linux-gnu") != std::string::npos);
+    CHECK_THAT(text, ContainsSubstring("/tree/etc/ld.so.conf.d/manifold-app.conf"));
+    CHECK_THAT(text, ContainsSubstring("/app/lib/x86_64-linux-gnu"));
 
     // fonts of the host
-    CHECK(text.find("/tree/etc/fonts/conf.d/50-manifold-host-fonts.conf") != std::string::npos);
-    CHECK(
-        text.find(R"(<remap-dir as-path="/usr/share/fonts">/run/host/usr/share/fonts</remap-dir>)")
-        != std::string::npos);
+    CHECK_THAT(text, ContainsSubstring("/tree/etc/fonts/conf.d/50-manifold-host-fonts.conf"));
+    CHECK_THAT(
+        text, ContainsSubstring(R"(<remap-dir as-path="/usr/share/fonts">/run/host/usr/share/fonts</remap-dir>)"));
 }
