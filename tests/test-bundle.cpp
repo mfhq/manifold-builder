@@ -61,7 +61,7 @@ fs::path make_test_bundle(const fs::path &dir, const std::optional<fs::path> &ke
   <component type="generic">
     <id>net.example.core</id>
     <name>Example Core</name>
-    <custom><value key="manifold.id">x86_64/net.example.core/1</value></custom>
+    <bundle type="manifold">x86_64/net.example.core/1</bundle>
   </component>
 </components>
 )";

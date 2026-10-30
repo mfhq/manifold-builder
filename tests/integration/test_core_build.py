@@ -239,7 +239,7 @@ def test_core_sdk(core):
     ).read_text()
     assert '<name>Test Core (SDK)</name>' in sdk_metainfo
     assert '<extends>com.example.testcore</extends>' in sdk_metainfo
-    assert 'manifold.id' not in sdk_metainfo
+    assert '<bundle' not in sdk_metainfo
     assert '<name>Test Core (SDK)</name>' in core.component(sdk)
 
 
@@ -266,7 +266,7 @@ def test_platform(platform, core):
     # the platform ships no MetaInfo, so it is generated from the recipe
     metainfo = (tree / 'usr/share/metainfo/com.example.testcore.jpeg.metainfo.xml').read_text()
     assert '<name>JPEG Platform</name>' in metainfo
-    assert 'manifold.id' not in metainfo
+    assert '<bundle' not in metainfo
 
     # the part goes to the platform, its header to the platform's SDK
     assert (tree / 'usr/share/jpeg-platform/data.txt').is_file()

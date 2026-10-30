@@ -245,7 +245,7 @@ TEST_CASE("MetaInfo: generated documents", "[metainfo]")
     CHECK_THAT(xml, ContainsSubstring("<p>First paragraph still first.</p>"));
     CHECK_THAT(xml, ContainsSubstring("Second &lt;paragraph&gt;"));
     // only the MetaInfo in the bundle names the image to install
-    CHECK_THAT(xml, !ContainsSubstring("manifold.id"));
+    CHECK_THAT(xml, !ContainsSubstring("<bundle"));
     check_valid(xml);
 
     // a runtime extends nothing
@@ -293,7 +293,7 @@ TEST_CASE("MetaInfo: catalog of a bundle", "[metainfo]")
 
     // the catalog keeps translations and icon of the image only
     AppStreamCatalog catalog(dir / "catalog");
-    catalog.add_tree(tree, "/usr", "net.example.core", manifold_custom("x86_64", "net.example.core", "1.0"));
+    catalog.add_tree(tree, "/usr", "net.example.core", manifold_bundle_id("x86_64", "net.example.core", "1.0"));
     auto catalog_file = catalog.write();
     CHECK(catalog_file == dir / "catalog/manifold-local.xml");
     auto xml = read_file(catalog_file);
@@ -301,7 +301,7 @@ TEST_CASE("MetaInfo: catalog of a bundle", "[metainfo]")
     CHECK_THAT(xml, ContainsSubstring("origin=\"manifold-local\""));
     CHECK_THAT(xml, ContainsSubstring("Beispielkern"));
     // it names the image to install
-    CHECK_THAT(xml, ContainsSubstring("<value key=\"manifold.id\">x86_64/net.example.core/1.0</value>"));
+    CHECK_THAT(xml, ContainsSubstring("<bundle type=\"manifold\">x86_64/net.example.core/1.0</bundle>"));
     // the icon is stored next to the catalog
     CHECK_THAT(xml, ContainsSubstring("<icon type=\"cached\""));
     CHECK(fs::is_regular_file(dir / "catalog/icons/64x64/net.example.core.jxl"));
@@ -309,5 +309,7 @@ TEST_CASE("MetaInfo: catalog of a bundle", "[metainfo]")
     CHECK_THAT(xml, !ContainsSubstring("org.example.tool"));
 
     // the tree has to describe the image it belongs to
-    CHECK_THROWS_AS(catalog.add_tree(tree, "/usr", "net.example.other", {}), BuildError);
+    CHECK_THROWS_AS(
+        catalog.add_tree(tree, "/usr", "net.example.other", manifold_bundle_id("x86_64", "net.example.other", "1.0")),
+        BuildError);
 }
