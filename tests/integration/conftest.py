@@ -17,6 +17,7 @@ import pytest
 STORE = Path('/var/lib/manifold')
 CORE = 'net.debian.core13'
 DATA_DIR = Path(__file__).parent / 'data'
+SAMPLES_DIR = Path(__file__).parent.parent / 'samples'
 
 
 class Bundle:

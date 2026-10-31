@@ -2,6 +2,12 @@
 # Tests
 #
 
+# tests must not sign with the keys of the user
+test_env = {
+    'MANIFOLD_SIGNING_KEY' : '',
+    'XDG_CONFIG_HOME' : meson.current_build_dir() / 'no-config',
+}
+
 test_shared_src = [
     'testshared.hpp',
     'testshared.cpp',
@@ -28,6 +34,7 @@ test_builder = executable('test-builder',
 )
 
 test('builder', test_builder,
+    env : test_env,
     suite : 'unit',
 )
 
@@ -44,7 +51,7 @@ if python.found()
             '--basetemp', meson.current_build_dir() / 'integration-tmp',
             meson.current_source_dir() / 'integration',
         ],
-        env : {
+        env : test_env + {
             'MANIFOLD_BUILDER' : mfbuilder_exe.full_path(),
             'PYTHONDONTWRITEBYTECODE' : '1',
         },

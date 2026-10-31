@@ -8,6 +8,7 @@
 #include "checksum.hpp"
 #include "manifest.hpp"
 #include "process.hpp"
+#include "scopeguard.hpp"
 #include "testshared.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -54,7 +55,7 @@ void replace_entry(const fs::path &archive_path, const std::string &name, std::s
 /**
  * Write a bundle with one fake image, its manifest and a catalog that Manifold accepts.
  */
-fs::path make_test_bundle(const fs::path &dir, const std::optional<fs::path> &key = std::nullopt)
+fs::path make_test_bundle(const fs::path &dir)
 {
     const std::string catalog = R"(<?xml version="1.0" encoding="UTF-8"?>
 <components version="1.0" origin="manifold-local">
@@ -78,8 +79,7 @@ fs::path make_test_bundle(const fs::path &dir, const std::optional<fs::path> &ke
             {"core.raw", dir / "core.raw", true},
             {"core.manifold.json", dir / "core.manifold.json", false},
             {"catalog/manifold-local.xml", dir / "catalog.xml", false},
-        },
-        key);
+        });
     return bundle;
 }
 
@@ -115,8 +115,11 @@ TEST_CASE("Bundle: bundles are signed with SSH keys", "[bundle]")
     TempDir dir("sign");
     auto key = dir / "key";
     run({.argv = {"ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key.string()}});
+    g_autoptr(MfSigner) signer = select_signer(key.c_str());
 
-    auto bundle = make_test_bundle(dir.path(), key);
+    auto bundle = make_test_bundle(dir.path());
+    sign_bundle(bundle, signer);
+    CHECK_NOTHROW(verify_bundle(bundle));
     auto signature = zip_entry(bundle, "index.json.sig");
     CHECK(signature.starts_with("-----BEGIN SSH SIGNATURE-----"));
 
@@ -124,18 +127,31 @@ TEST_CASE("Bundle: bundles are signed with SSH keys", "[bundle]")
     write_file(dir / "index.json", zip_entry(bundle, "index.json"));
     write_file(dir / "index.json.sig", signature);
     auto verify = run_status({
-        .argv = {"sh", "-c", "ssh-keygen -Y check-novalidate -n manifold-bundle -s index.json.sig < index.json"},
+        .argv = {"sh", "-c", "ssh-keygen -Y check-novalidate -n manifold.bundle -s index.json.sig < index.json"},
         .cwd = dir.path(),
     });
     CHECK(verify == 0);
 
-    // signing again replaces the signature
-    sign_bundle(bundle, key);
-    CHECK(zip_entry(bundle, "index.json.sig").starts_with("-----BEGIN SSH SIGNATURE-----"));
-
     // a changed file is noticed before signing
     replace_entry(bundle, "catalog/manifold-local.xml", "x");
-    CHECK_THROWS_AS(sign_bundle(bundle, key), BuildError);
+    CHECK_THROWS_AS(sign_bundle(bundle, signer), BuildError);
+}
+
+TEST_CASE("Bundle: the default signing key is used when none is asked for", "[bundle]")
+{
+    if (!find_tool("ssh-keygen"))
+        SKIP("ssh-keygen is not installed");
+
+    // the test run points XDG_CONFIG_HOME at an empty directory
+    CHECK(select_signer(nullptr) == nullptr);
+
+    g_setenv(MF_SIGNING_KEY_ENV, "a key", TRUE);
+    ScopeGuard unset_key([] {
+        g_unsetenv(MF_SIGNING_KEY_ENV);
+    });
+    g_autoptr(MfSigner) signer = select_signer(nullptr);
+    REQUIRE(signer != nullptr);
+    CHECK(std::string_view(mf_signer_get_name(signer)) == "$" MF_SIGNING_KEY_ENV);
 }
 
 TEST_CASE("Bundle: a bundle that cannot be signed is written unsigned", "[bundle]")
@@ -145,14 +161,12 @@ TEST_CASE("Bundle: a bundle that cannot be signed is written unsigned", "[bundle
 
     TempDir dir("sign-fails");
     write_file(dir / "key", "not a key\n");
-    CHECK_NOTHROW(check_sign_key(dir / "key"));
-    CHECK_THROWS_AS(check_sign_key(dir / "missing"), BuildError);
+    g_autoptr(MfSigner) signer = select_signer((dir / "key").c_str());
+    CHECK_THROWS_AS(select_signer((dir / "missing").c_str()), BuildError);
+    CHECK_THROWS_AS(select_signer("no-such-key"), BuildError);
 
-    CHECK_THROWS_WITH(make_test_bundle(dir.path(), dir / "key"), ContainsSubstring("was written unsigned"));
-    auto bundle = dir / "core.manifold";
+    auto bundle = make_test_bundle(dir.path());
+    CHECK_THROWS_WITH(sign_bundle(bundle, signer), ContainsSubstring("was written unsigned"));
     CHECK_NOTHROW(verify_bundle(bundle));
     CHECK(zip_entry(bundle, "index.json.sig").empty());
-    // nothing is left of what ssh-keygen was given
-    CHECK(!fs::exists(dir / "core.manifold.index.json"));
-    CHECK(!fs::exists(dir / "core.manifold.index.json.sig"));
 }
