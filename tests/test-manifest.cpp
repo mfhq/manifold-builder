@@ -279,6 +279,8 @@ TEST_CASE("MetaInfo: catalog of a bundle", "[metainfo]")
 {
     TempDir dir("metainfo");
     auto tree = dir / "tree";
+    auto icons_dir = dir / "catalog/icons";
+    auto media_dir = dir / "catalog/media";
     write_core_tree(tree);
 
     // the MetaInfo of the image is read
@@ -292,24 +294,15 @@ TEST_CASE("MetaInfo: catalog of a bundle", "[metainfo]")
     CHECK(info.homepage == "https://example.org/core");
 
     // the catalog keeps translations and icon of the image only
-    AppStreamCatalog catalog(dir / "catalog");
-    catalog.add_tree(tree, "/usr", "net.example.core", manifold_bundle_id("x86_64", "net.example.core", "1.0"));
-    auto catalog_file = catalog.write();
-    CHECK(catalog_file == dir / "catalog/manifold-local.xml");
-    auto xml = read_file(catalog_file);
-    CHECK_THAT(xml, ContainsSubstring("<components "));
-    CHECK_THAT(xml, ContainsSubstring("origin=\"manifold-local\""));
+    auto xml = compose_catalog(tree, "/usr", "net.example.core", icons_dir, media_dir);
+    CHECK_THAT(xml, ContainsSubstring("<components"));
     CHECK_THAT(xml, ContainsSubstring("Beispielkern"));
-    // it names the image to install
-    CHECK_THAT(xml, ContainsSubstring("<bundle type=\"manifold\">x86_64/net.example.core/1.0</bundle>"));
     // the icon is stored next to the catalog
     CHECK_THAT(xml, ContainsSubstring("<icon type=\"cached\""));
-    CHECK(fs::is_regular_file(dir / "catalog/icons/64x64/net.example.core.jxl"));
+    CHECK(fs::is_regular_file(icons_dir / "64x64/net.example.core.jxl"));
     // MetaInfo of packages in the image is left out
     CHECK_THAT(xml, !ContainsSubstring("org.example.tool"));
 
     // the tree has to describe the image it belongs to
-    CHECK_THROWS_AS(
-        catalog.add_tree(tree, "/usr", "net.example.other", manifold_bundle_id("x86_64", "net.example.other", "1.0")),
-        BuildError);
+    CHECK_THROWS_AS(compose_catalog(tree, "/usr", "net.example.other", icons_dir, media_dir), BuildError);
 }
