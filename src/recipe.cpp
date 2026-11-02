@@ -185,6 +185,8 @@ struct glz::meta<mfb::Recipe> {
         &T::run_on_sdk,
         "integration",
         &T::integration,
+        "rename",
+        &T::rename,
         "build-options",
         &T::build_options,
         "parts",
@@ -420,6 +422,12 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
             problem(std::format("'kit-strategy' must be 'roaming' or 'strict', not '{}'", recipe.kit_strategy));
         if (recipe.integration)
             validate_integration(recipe, problem);
+        for (const auto &[pattern, name] : recipe.rename.value_or(std::map<std::string, std::string>{})) {
+            if (pattern.empty() || !stays_below(pattern))
+                problem(std::format("rename: '{}' has to be a path below /app", pattern));
+            if (name.empty() || name.find('/') != std::string::npos || name == "." || name == "..")
+                problem(std::format("rename: '{}' has to be the new name of the file, without a directory", name));
+        }
     }
     validate_parts(recipe, problem);
 
@@ -431,6 +439,7 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
             {"generate-sdk", recipe.generate_sdk},
             {"run-on-sdk", recipe.run_on_sdk},
             {"integration", recipe.integration.has_value()},
+            {"rename", recipe.rename.has_value()},
         };
         for (const auto &[key, set] : app_keys) {
             if (set)

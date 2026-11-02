@@ -13,6 +13,7 @@
 #include "error.hpp"
 #include "checksum.hpp"
 #include "identity.hpp"
+#include "integration.hpp"
 #include "logging.hpp"
 #include "sandbox.hpp"
 
@@ -268,6 +269,7 @@ private:
         // clean up last: a later part may need what an earlier one cleans up
         for (const auto *part : m_parts)
             cleanup_part(*part, app_stage() / "app", files_added(*part));
+        rename_files(app_stage() / "app", m_recipe);
 
         // a link may point below the runtime's /usr, which is not in the stage
         if (!fs::exists(fs::symlink_status(app_stage() / "app/bin" / m_recipe.command)))

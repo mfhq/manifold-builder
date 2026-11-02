@@ -11,7 +11,9 @@
 #include "logging.hpp"
 
 #include <algorithm>
+#include <fnmatch.h>
 #include <manifold.h>
+#include <map>
 #include <ranges>
 #include <set>
 
@@ -180,6 +182,165 @@ std::vector<IntegrationAlias> collect_aliases(const fs::path &app, const std::ve
     return aliases;
 }
 
+/**
+ * Get the files and links below a directory, sorted by their path relative to
+ * it. A link to a directory is not followed, as it may lead out of the tree.
+ */
+std::vector<fs::path> list_files(const fs::path &dir)
+{
+    auto files = list_tree(dir);
+
+    std::erase_if(files, [&](const fs::path &file) {
+        return fs::is_directory(fs::symlink_status(dir / file));
+    });
+    std::ranges::sort(files);
+
+    return files;
+}
+
+/**
+ * Change each line of a text, and keep the text as it is otherwise.
+ */
+std::string map_lines(const std::string &content, const std::function<std::string(std::string)> &map)
+{
+    std::string result;
+
+    for (auto range : content | std::views::split('\n')) {
+        result += map(std::string(std::string_view(range)));
+        result += '\n';
+    }
+    // a text has one line more than it has newlines
+    result.pop_back();
+
+    return result;
+}
+
+/**
+ * Get the name of a unit or an icon without its suffix, like `foo@` of
+ * `foo@.service`, and the suffix.
+ */
+std::pair<std::string, std::string> split_suffix(const std::string &name)
+{
+    auto dot = name.rfind('.');
+    if (dot == std::string::npos)
+        return {name, ""};
+    return {name.substr(0, dot), name.substr(dot)};
+}
+
+/**
+ * Replace a renamed unit in a word of a unit file. An instance of a renamed
+ * template unit gets the new name of the template.
+ */
+std::optional<std::string> rename_unit_word(std::string_view word, const std::map<std::string, std::string> &units)
+{
+    if (auto found = units.find(std::string(word)); found != units.end())
+        return found->second;
+
+    for (const auto &[from, to] : units) {
+        auto at = from.find("@.");
+        if (at == std::string::npos)
+            continue;
+        auto prefix = std::string_view(from).substr(0, at + 1);
+        auto suffix = std::string_view(from).substr(at + 1);
+        if (word.size() > prefix.size() + suffix.size() && word.starts_with(prefix) && word.ends_with(suffix)) {
+            auto instance = word.substr(prefix.size(), word.size() - prefix.size() - suffix.size());
+            auto to_at = to.find("@.");
+            return std::format("{}{}{}", to.substr(0, to_at + 1), instance, to.substr(to_at + 1));
+        }
+    }
+
+    return std::nullopt;
+}
+
+/**
+ * Give the renamed units their new names in the keys of a unit. We leave the
+ * commands alone, as they are run in the image, where the units have no name.
+ */
+std::string rename_units_in(const std::string &content, const std::map<std::string, std::string> &units)
+{
+    return map_lines(content, [&](std::string line) {
+        auto equals = line.find('=');
+        std::vector<std::string> words;
+        bool changed = false;
+
+        if (equals == std::string::npos || line.starts_with('#') || line.starts_with(';') || line.starts_with("Exec"))
+            return line;
+        for (auto range : std::string_view(line).substr(equals + 1) | std::views::split(' ')) {
+            auto renamed = rename_unit_word(std::string_view(range), units);
+            changed = changed || renamed.has_value();
+            words.push_back(renamed.value_or(std::string(std::string_view(range))));
+        }
+        return changed ? line.substr(0, equals + 1) + join(words, " ") : line;
+    });
+}
+
+/**
+ * Give the renamed icons their new names in a desktop entry.
+ */
+std::string rename_icons_in(const std::string &content, const std::map<std::string, std::string> &icons)
+{
+    return map_lines(content, [&](std::string line) {
+        auto equals = line.find('=');
+
+        if (equals == std::string::npos || !(line.starts_with("Icon=") || line.starts_with("Icon[")))
+            return line;
+        auto found = icons.find(line.substr(equals + 1));
+        return found != icons.end() ? line.substr(0, equals + 1) + found->second : line;
+    });
+}
+
+/**
+ * Rewrite a file of the app in place. Only a regular file is rewritten: the
+ * builder runs on the host, where a link of the tree may point anywhere.
+ */
+void rewrite_file(const fs::path &path, const std::function<std::string(const std::string &)> &rewrite)
+{
+    if (!fs::is_regular_file(fs::symlink_status(path)))
+        return;
+    auto content = read_file(path);
+    auto rewritten = rewrite(content);
+    if (rewritten != content)
+        write_file(path, rewritten);
+}
+
+/**
+ * Check that the units which systemd pairs by their names stay pairs: a socket,
+ * a timer or a path unit starts the service of the same name.
+ */
+void check_unit_pairs(const fs::path &dir, const std::map<std::string, std::string> &units)
+{
+    static const std::pair<const char *, const char *> pairs[] = {
+        {".socket", ".service"},
+        {".timer", ".service"},
+        {".path", ".service"},
+    };
+
+    for (const auto &[from, to] : units) {
+        auto [stem, suffix] = split_suffix(from);
+        for (const auto &[first, second] : pairs) {
+            std::string partner;
+            if (suffix == first)
+                partner = stem + second;
+            else if (suffix == second)
+                partner = stem + first;
+            else
+                continue;
+
+            auto renamed = units.find(partner);
+            if (renamed == units.end()) {
+                if (fs::exists(fs::symlink_status(dir / partner)))
+                    fail(
+                        "rename: {} and {} belong together by their names, so they have to be renamed together",
+                        from,
+                        partner);
+                continue;
+            }
+            if (split_suffix(renamed->second).first != split_suffix(to).first)
+                fail("rename: {} and {} belong together by their names, so they need the same new name", from, partner);
+        }
+    }
+}
+
 GBytes *read_bytes(const fs::path &path)
 {
     auto content = read_file(path);
@@ -187,6 +348,75 @@ GBytes *read_bytes(const fs::path &path)
 }
 
 } // namespace
+
+void rename_files(const fs::path &app, const Recipe &recipe)
+{
+    std::map<fs::path, fs::path> renamed;
+
+    if (!recipe.rename)
+        return;
+
+    auto files = list_files(app);
+    for (const auto &[pattern, name] : *recipe.rename) {
+        bool matched = false;
+
+        for (const auto &file : files) {
+            if (fnmatch(pattern.c_str(), file.c_str(), FNM_PATHNAME) != 0)
+                continue;
+            matched = true;
+
+            auto to = file.parent_path() / name;
+            if (renamed.contains(file))
+                fail("rename: /app/{} is matched by more than one pattern", file.string());
+            if (fs::exists(fs::symlink_status(app / to)))
+                fail("rename: /app/{} can not get the name {}, as /app/{} exists", file.string(), name, to.string());
+            LOG_INFO(logIntegration, "Renaming /app/{} to {}", file.string(), name);
+            fs::rename(app / file, app / to);
+            renamed[file] = to;
+        }
+        if (!matched)
+            fail("rename: '{}' matches no file below /app", pattern);
+    }
+
+    // the units of each manager refer to each other by their names
+    for (auto kind : {MF_INTEGRATION_KIND_SYSTEMD_UNIT_SYSTEM, MF_INTEGRATION_KIND_SYSTEMD_UNIT_USER}) {
+        fs::path dir = mf_integration_kind_get_dir(kind);
+        std::map<std::string, std::string> units;
+
+        for (const auto &[from, to] : renamed) {
+            if (from.parent_path() == dir)
+                units[from.filename().string()] = to.filename().string();
+        }
+        if (units.empty())
+            continue;
+        check_unit_pairs(app / dir, units);
+        for (const auto &file : list_files(app / dir))
+            rewrite_file(app / dir / file, [&](const std::string &content) {
+                return rename_units_in(content, units);
+            });
+    }
+
+    // desktop entries refer to icons by their names, which are the same in every size
+    fs::path theme = mf_integration_kind_get_dir(MF_INTEGRATION_KIND_ICON);
+    std::map<std::string, std::string> icons;
+    for (const auto &[from, to] : renamed) {
+        auto in_theme = from.lexically_relative(theme);
+        if (in_theme.empty() || *in_theme.begin() == "..")
+            continue;
+        auto old_name = from.stem().string();
+        auto new_name = to.stem().string();
+        if (auto known = icons.find(old_name); known != icons.end() && known->second != new_name)
+            fail("rename: the icon {} gets more than one new name: {} and {}", old_name, known->second, new_name);
+        icons[old_name] = new_name;
+    }
+    fs::path entries = mf_integration_kind_get_dir(MF_INTEGRATION_KIND_DESKTOP_ENTRY);
+    if (icons.empty() || !fs::is_directory(app / entries))
+        return;
+    for (const auto &file : list_files(app / entries))
+        rewrite_file(app / entries / file, [&](const std::string &content) {
+            return rename_icons_in(content, icons);
+        });
+}
 
 std::optional<IntegrationInfo> collect_integration(const fs::path &tree, const Recipe &recipe)
 {

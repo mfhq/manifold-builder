@@ -17,6 +17,15 @@ namespace mfb
 {
 
 /**
+ * Rename files below /app as the recipe says, in the tree of the image. A unit
+ * or a desktop entry of the app that refers to a renamed unit or icon by its
+ * name gets the new name. Fails the build if a pattern matches no file, if a
+ * new name is taken, or if units that belong together by their names would be
+ * separated.
+ */
+void rename_files(const fs::path &app, const Recipe &recipe);
+
+/**
  * Find what an application installs on the host in the tree of its image: what
  * the recipe lists, the desktop entry named after the application, and the
  * icons of all desktop entries.

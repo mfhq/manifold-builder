@@ -195,6 +195,101 @@ TEST_CASE("a desktop entry has to run a program of the image", "[integration]")
     CHECK_THROWS_WITH(collect_integration(tree.path(), recipe), ContainsSubstring("runs 'missing'"));
 }
 
+TEST_CASE("a recipe renames files, and what refers to them", "[integration]")
+{
+    TempDir tree("integration-rename");
+    const std::string units = "lib/systemd/system/";
+    add_file(tree, "bin/app", "#!/bin/sh\n");
+    add_file(tree, "lib/udev/rules.d/60-steam-input.rules", "KERNEL==\"uinput\", TAG+=\"uaccess\"\n");
+    add_file(tree, "share/icons/hicolor/48x48/apps/steam.png", "png");
+    add_file(tree, "share/icons/hicolor/64x64/apps/steam.png", "png");
+    add_file(
+        tree,
+        "share/applications/com.example.app.desktop",
+        "[Desktop Entry]\nType=Application\nName=A\nExec=app\nIcon=steam\n");
+    add_file(tree, units + "helper.socket", "[Socket]\nListenStream=/run/helper\n");
+    add_file(tree, units + "helper.service", "[Service]\nExecStart=app --helper\n");
+    add_file(tree, units + "worker@.service", "[Service]\nExecStart=app --worker %i\n");
+    add_file(
+        tree,
+        units + "com.example.app.service",
+        "[Unit]\nRequires=helper.service other.service\nWants=worker@one.service\n"
+        "[Service]\nExecStart=app helper.service\n");
+    auto recipe = app_recipe(
+        "rename:\n"
+        "  lib/udev/rules.d/60-steam-input.rules: 60-com.example.app.input.rules\n"
+        "  share/icons/hicolor/*/apps/steam.png: com.example.app.steam.png\n"
+        "  lib/systemd/system/helper.socket: com.example.app.helper.socket\n"
+        "  lib/systemd/system/helper.service: com.example.app.helper.service\n"
+        "  lib/systemd/system/worker@.service: com.example.app.worker@.service\n"
+        "integration:\n"
+        "  udev-rule: [60-com.example.app.input.rules]\n"
+        "  systemd-unit-system: [com.example.app.service, com.example.app.helper.socket]\n");
+
+    // a link of the tree may point anywhere on the host, where the builder runs
+    write_file(tree / "outside.service", "Requires=helper.service\n");
+    fs::create_symlink(tree / "outside.service", tree / "app" / units / "link.service");
+
+    rename_files(tree / "app", recipe);
+    CHECK(read_file(tree / "outside.service") == "Requires=helper.service\n");
+    CHECK(fs::exists(tree / "app/lib/udev/rules.d/60-com.example.app.input.rules"));
+    CHECK(fs::exists(tree / "app/share/icons/hicolor/48x48/apps/com.example.app.steam.png"));
+    CHECK(fs::exists(tree / "app/share/icons/hicolor/64x64/apps/com.example.app.steam.png"));
+    CHECK_FALSE(fs::exists(tree / "app/share/icons/hicolor/48x48/apps/steam.png"));
+
+    // the units refer to the new names, but the commands run in the image and stay as they are
+    CHECK(
+        read_file(tree / "app" / units / "com.example.app.service")
+        == "[Unit]\nRequires=com.example.app.helper.service other.service\nWants=com.example.app.worker@one.service\n"
+           "[Service]\nExecStart=app helper.service\n");
+    CHECK_THAT(
+        read_file(tree / "app/share/applications/com.example.app.desktop"),
+        ContainsSubstring("\nIcon=com.example.app.steam\n"));
+
+    auto info = collect_integration(tree.path(), recipe);
+    REQUIRE(info);
+    CHECK(info->udev_rule.size() == 1);
+    CHECK(info->icon.size() == 2);
+    CHECK(info->systemd_unit_system.size() == 2);
+}
+
+TEST_CASE("a rename that can not work fails the build", "[integration]")
+{
+    TempDir tree("integration-rename-fails");
+    add_file(tree, "lib/systemd/system/helper.socket", "[Socket]\n");
+    add_file(tree, "lib/systemd/system/helper.service", "[Service]\n");
+    add_file(tree, "share/icons/hicolor/48x48/apps/steam.png", "png");
+    add_file(tree, "share/icons/hicolor/64x64/apps/steam.png", "png");
+    add_file(tree, "share/icons/hicolor/64x64/apps/taken.png", "png");
+
+    auto fails = [&](std::string_view rename, std::string_view message) {
+        TempDir copy("integration-rename-copy");
+        fs::copy(tree / "app", copy / "app", fs::copy_options::recursive);
+        CHECK_THROWS_WITH(
+            rename_files(copy / "app", app_recipe(std::string(rename))), ContainsSubstring(std::string(message)));
+    };
+    fails("rename: {share/missing.png: other.png}\n", "matches no file");
+    fails("rename: {share/icons/hicolor/64x64/apps/steam.png: taken.png}\n", "exists");
+    // a socket starts the service of the same name, so they have to keep one name
+    fails("rename: {lib/systemd/system/helper.socket: com.example.app.helper.socket}\n", "renamed together");
+    fails(
+        "rename:\n  lib/systemd/system/helper.socket: com.example.app.a.socket\n"
+        "  lib/systemd/system/helper.service: com.example.app.b.service\n",
+        "the same new name");
+    // an icon has one name in all of its sizes
+    fails(
+        "rename:\n  share/icons/hicolor/48x48/apps/steam.png: one.png\n"
+        "  share/icons/hicolor/64x64/apps/steam.png: two.png\n",
+        "more than one new name");
+
+    const std::string app(APP_RECIPE);
+    CHECK(recipe_rejected(app + "rename: {../bin/sh: x}\n"));
+    CHECK(recipe_rejected(app + "rename: {/etc/passwd: x}\n"));
+    CHECK(recipe_rejected(app + "rename: {bin/app: sub/app}\n"));
+    CHECK(recipe_rejected(app + "rename: {bin/app: ..}\n"));
+    CHECK(recipe_rejected(std::string(test::PLATFORM_HEADER) + "rename: {bin/app: x}\n"));
+}
+
 TEST_CASE("what a recipe lists has to be there", "[integration]")
 {
     TempDir tree("integration-listed");

@@ -214,6 +214,12 @@ struct Recipe {
     bool run_on_sdk = false;
     std::optional<IntegrationSettings> integration;
 
+    /**
+     * Files below /app to give another name in the image, as the shell glob of
+     * their paths and their new name.
+     */
+    std::optional<std::map<std::string, std::string>> rename;
+
     // common
     std::optional<BuildSettings> build_options; ///< Build options for every part, below each part's own
     std::vector<PartEntry> parts;

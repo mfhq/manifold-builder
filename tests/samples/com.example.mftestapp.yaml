@@ -18,11 +18,16 @@ packages-sdk:
   - pkgconf
   - appstream
 
+rename:
+  lib/udev/rules.d/60-mftestapp.rules: 60-com.example.mftestapp.rules
+
 integration:
   alias:
   - mftestapp
   systemd-unit-system:
   - com.example.mftestapp-report.service
+  udev-rule:
+  - 60-com.example.mftestapp.rules
 
 parts:
 - name: mftestapp
