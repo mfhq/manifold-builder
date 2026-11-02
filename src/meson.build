@@ -18,6 +18,7 @@ mfb_lib_sources = files(
     'identity.cpp',
     'manifest.cpp',
     'image.cpp',
+    'integration.cpp',
     'logging.cpp',
     'recipe.cpp',
     'process.cpp',

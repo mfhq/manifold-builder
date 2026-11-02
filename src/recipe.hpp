@@ -152,6 +152,34 @@ struct Part {
     bool builds_on(std::string_view architecture) const;
 };
 
+/**
+ * An alias of `integration` that runs something else than the program of its name.
+ */
+struct AliasSettings {
+    std::string name;
+    std::string command; ///< What it runs, relative to /app
+};
+
+/**
+ * An entry of `integration.alias`: the name of a program in /app/bin, which
+ * the alias runs, or an alias that says what it runs.
+ */
+using AliasEntry = std::variant<std::string, AliasSettings>;
+
+/**
+ * What an application installs on the host. Files are named without their
+ * directory, as each kind has its own one below /app. The desktop entry named
+ * after the application and the icons of all desktop entries need no mention.
+ */
+struct IntegrationSettings {
+    std::vector<std::string> desktop_entry;
+    std::vector<std::string> mime_package;
+    std::vector<std::string> systemd_unit_system;
+    std::vector<std::string> systemd_unit_user;
+    std::vector<std::string> udev_rule;
+    std::vector<AliasEntry> alias;
+};
+
 struct Recipe {
     std::string type = "app"; ///< "core", "platform" or "app"
     std::string component;
@@ -184,6 +212,7 @@ struct Recipe {
     std::string kit_strategy = "roaming"; ///< How the application relates to its kit: "roaming" or "strict"
     bool generate_sdk = false;
     bool run_on_sdk = false;
+    std::optional<IntegrationSettings> integration;
 
     // common
     std::optional<BuildSettings> build_options; ///< Build options for every part, below each part's own

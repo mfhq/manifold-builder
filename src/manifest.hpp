@@ -85,6 +85,36 @@ struct AppInfo {
 };
 
 /**
+ * A file of the image that the host installs.
+ */
+struct IntegrationFile {
+    std::string path; ///< Where it is in the image
+    std::string sha256;
+    std::string blake3;
+};
+
+/**
+ * A command of the host that runs a program of the image.
+ */
+struct IntegrationAlias {
+    std::string name;
+    std::string command; ///< What it runs, an absolute path below /app
+};
+
+/**
+ * What an application installs on the host.
+ */
+struct IntegrationInfo {
+    std::vector<IntegrationFile> desktop_entry;
+    std::vector<IntegrationFile> icons;
+    std::vector<IntegrationFile> mime_package;
+    std::vector<IntegrationFile> systemd_unit_system;
+    std::vector<IntegrationFile> systemd_unit_user;
+    std::vector<IntegrationFile> udev_rule;
+    std::vector<IntegrationAlias> alias;
+};
+
+/**
  * The exact origin of a part's source: the commit of a git source, the sha256
  * of a file, archive or patch, or the tree_hash() of a directory.
  */
@@ -136,6 +166,7 @@ struct Manifest {
     std::map<std::string, InstalledPackages> packages; ///< By package system ("apt"): name -> version.
     std::optional<AppInfo> app;
     std::optional<std::vector<SourceRecord>> sources;
+    std::optional<IntegrationInfo> integration;
     std::optional<ImageFile> image;
 
     BaseRef as_base() const

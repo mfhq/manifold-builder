@@ -18,6 +18,12 @@ packages-sdk:
   - pkgconf
   - appstream
 
+integration:
+  alias:
+  - mftestapp
+  systemd-unit-system:
+  - com.example.mftestapp-report.service
+
 parts:
 - name: mftestapp
   buildsystem: meson

@@ -122,6 +122,30 @@ struct glz::meta<mfb::Part> {
 };
 
 template<>
+struct glz::meta<mfb::AliasSettings> {
+    using T = mfb::AliasSettings;
+    static constexpr auto value = object("name", &T::name, "command", &T::command);
+};
+
+template<>
+struct glz::meta<mfb::IntegrationSettings> {
+    using T = mfb::IntegrationSettings;
+    static constexpr auto value = object(
+        "desktop-entry",
+        &T::desktop_entry,
+        "mime-package",
+        &T::mime_package,
+        "systemd-unit-system",
+        &T::systemd_unit_system,
+        "systemd-unit-user",
+        &T::systemd_unit_user,
+        "udev-rule",
+        &T::udev_rule,
+        "alias",
+        &T::alias);
+};
+
+template<>
 struct glz::meta<mfb::Recipe> {
     using T = mfb::Recipe;
     static constexpr auto value = object(
@@ -159,6 +183,8 @@ struct glz::meta<mfb::Recipe> {
         &T::generate_sdk,
         "run-on-sdk",
         &T::run_on_sdk,
+        "integration",
+        &T::integration,
         "build-options",
         &T::build_options,
         "parts",
@@ -270,6 +296,40 @@ void validate_parts(const Recipe &recipe, const auto &problem)
     }
 }
 
+/**
+ * Refuse names that Manifold would not install, before we build anything.
+ */
+void validate_integration(const Recipe &recipe, const auto &problem)
+{
+    const auto &integration = *recipe.integration;
+    const std::pair<MfIntegrationKind, const std::vector<std::string> *> files[] = {
+        {MF_INTEGRATION_KIND_DESKTOP_ENTRY, &integration.desktop_entry},
+        {MF_INTEGRATION_KIND_MIME_PACKAGE, &integration.mime_package},
+        {MF_INTEGRATION_KIND_SYSTEMD_UNIT_SYSTEM, &integration.systemd_unit_system},
+        {MF_INTEGRATION_KIND_SYSTEMD_UNIT_USER, &integration.systemd_unit_user},
+        {MF_INTEGRATION_KIND_UDEV_RULE, &integration.udev_rule},
+    };
+    for (const auto &[kind, names] : files) {
+        for (const auto &name : *names) {
+            if (!mf_integration_name_is_valid(kind, name.c_str(), recipe.component.c_str()))
+                problem(
+                    std::format(
+                        "integration: {}: '{}' is not a file name that starts with the component",
+                        mf_integration_kind_to_string(kind),
+                        name));
+        }
+    }
+    for (const auto &entry : integration.alias) {
+        const auto *alias = std::get_if<AliasSettings>(&entry);
+        const auto &name = alias != nullptr ? alias->name : std::get<std::string>(entry);
+
+        if (!mf_program_name_is_valid(name.c_str()))
+            problem(std::format("integration: alias: '{}' is not a valid name for a program", name));
+        if (alias != nullptr && (alias->command.empty() || !stays_below(alias->command)))
+            problem(std::format("integration: alias: '{}' has to run a path below /app", name));
+    }
+}
+
 void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir)
 {
     auto problem = [&](std::string message) {
@@ -349,7 +409,7 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
         if (recipe.base.empty() || recipe.base_version.empty())
             problem("An app recipe needs 'base' (naming a core or a platform) and 'base-version'");
         // Manifold looks the command up in /app/bin and the PATH
-        if (recipe.command.empty() || recipe.command.find('/') != std::string::npos)
+        if (!mf_program_name_is_valid(recipe.command.c_str()))
             problem(
                 std::format(
                     "An app recipe needs 'command': the name of the program to run, without a path, not '{}'",
@@ -358,6 +418,8 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
             problem("An app recipe needs at least one entry in 'parts'");
         if (recipe.kit_strategy != "roaming" && recipe.kit_strategy != "strict")
             problem(std::format("'kit-strategy' must be 'roaming' or 'strict', not '{}'", recipe.kit_strategy));
+        if (recipe.integration)
+            validate_integration(recipe, problem);
     }
     validate_parts(recipe, problem);
 
@@ -368,6 +430,7 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
             {"kit-strategy", recipe.kit_strategy != "roaming"},
             {"generate-sdk", recipe.generate_sdk},
             {"run-on-sdk", recipe.run_on_sdk},
+            {"integration", recipe.integration.has_value()},
         };
         for (const auto &[key, set] : app_keys) {
             if (set)

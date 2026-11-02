@@ -13,6 +13,7 @@
 #include "error.hpp"
 #include "checksum.hpp"
 #include "image.hpp"
+#include "integration.hpp"
 #include "logging.hpp"
 #include "process.hpp"
 #include "sources/source.hpp"
@@ -556,13 +557,15 @@ void Build::pack_outputs()
 
     Script s;
     for (auto &output : m_outputs) {
-        const auto &manifest = output.manifest;
+        auto &manifest = output.manifest;
         output.catalog = compose_catalog(
             output.tree,
             manifest.kind == "app" ? "/app" : "/usr",
             manifest.component,
             catalog_icons_dir(),
             catalog_media_dir());
+        if (manifest.kind == "app" && !manifest.sdk)
+            manifest.integration = collect_integration(output.tree, m_recipe);
         install_manifest(s, output);
         pack(s, output);
     }
@@ -764,7 +767,12 @@ fs::path Build::make_images()
             m_system->packages_of(record).size(),
             record.identity);
 
-        images.push_back({raw, to_json(record), output.catalog});
+        // Manifold can only read a manifest that describes an image
+        auto json = to_json(record);
+        if (record.integration)
+            check_integration(output.tree, json);
+
+        images.push_back({raw, json, output.catalog});
     }
 
     write_bundle(m_output, images, catalog_icons_dir(), catalog_media_dir(), m_options.signer);
