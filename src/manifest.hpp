@@ -106,7 +106,7 @@ struct IntegrationAlias {
  */
 struct IntegrationInfo {
     std::vector<IntegrationFile> desktop_entry;
-    std::vector<IntegrationFile> icons;
+    std::vector<IntegrationFile> icon;
     std::vector<IntegrationFile> mime_package;
     std::vector<IntegrationFile> systemd_unit_system;
     std::vector<IntegrationFile> systemd_unit_user;

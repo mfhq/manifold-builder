@@ -113,11 +113,11 @@ TEST_CASE("Host integration: collecting files", "[integration]")
         CHECK(info->desktop_entry[0].blake3 == checksum_data_hex(ENTRY, ChecksumKind::Blake3));
 
         // sorted, so that the manifest does not depend on the order of a directory
-        REQUIRE(info->icons.size() == 4);
-        CHECK(info->icons[0].path == "/app/share/icons/hicolor/32x32/mimetypes/com.example.app.png");
-        CHECK(info->icons[1].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
-        CHECK(info->icons[2].path == "/app/share/icons/hicolor/64x64@2/apps/com.example.app.png");
-        CHECK(info->icons[3].path == "/app/share/icons/hicolor/scalable/apps/com.example.app.svg");
+        REQUIRE(info->icon.size() == 4);
+        CHECK(info->icon[0].path == "/app/share/icons/hicolor/32x32/mimetypes/com.example.app.png");
+        CHECK(info->icon[1].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
+        CHECK(info->icon[2].path == "/app/share/icons/hicolor/64x64@2/apps/com.example.app.png");
+        CHECK(info->icon[3].path == "/app/share/icons/hicolor/scalable/apps/com.example.app.svg");
 
         // a recipe may name that desktop entry too
         info = collect_integration(
@@ -140,8 +140,38 @@ TEST_CASE("Host integration: collecting files", "[integration]")
 
         auto info = collect_integration(tree.path(), app_recipe());
         REQUIRE(info);
-        REQUIRE(info->icons.size() == 1);
-        CHECK(info->icons[0].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
+        REQUIRE(info->icon.size() == 1);
+        CHECK(info->icon[0].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
+    }
+
+    SECTION("a desktop entry has to run a program of the image")
+    {
+        const std::string file = "share/applications/com.example.app.other.desktop";
+        auto recipe = app_recipe("integration: {desktop-entry: [com.example.app.other.desktop]}\n");
+        add_file(tree, "libexec/helper", PROGRAM);
+
+        // collect an entry that runs the given command line
+        auto collect_with = [&](const std::string &exec) {
+            add_file(tree, file, ENTRY_HEAD + "Exec=" + exec + "\n");
+            return collect_integration(tree.path(), recipe);
+        };
+
+        CHECK_NOTHROW(collect_with("app %U"));
+        CHECK_NOTHROW(collect_with("\"app\" %U"));
+        CHECK_NOTHROW(collect_with("/app/libexec/helper"));
+
+        // a program of the base
+        CHECK_THROWS_AS(collect_with("vulkaninfo"), BuildError);
+        // a path outside of /app
+        CHECK_THROWS_AS(collect_with("/usr/bin/app"), BuildError);
+        // a program in the wrong place
+        CHECK_THROWS_AS(collect_with("/app/bin/helper"), BuildError);
+        // no program at all
+        CHECK_THROWS_AS(collect_with(""), BuildError);
+
+        // the actions of an entry run programs too
+        add_file(tree, file, ENTRY_HEAD + "Exec=app\n\n[Desktop Action new]\nName=New\nExec=missing --new\n");
+        CHECK_THROWS_WITH(collect_integration(tree.path(), recipe), ContainsSubstring("runs 'missing'"));
     }
 
     SECTION("listed files are recorded, and have to exist")
@@ -207,6 +237,7 @@ TEST_CASE("Host integration: manifest check", "[integration]")
 
     SECTION("the main desktop entry has to run the command of the application")
     {
+        add_file(tree, "bin/other", PROGRAM);
         add_file(tree, "share/applications/com.example.app.desktop", ENTRY_HEAD + "Exec=other\n");
 
         info = collect_integration(tree.path(), recipe);
