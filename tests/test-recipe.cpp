@@ -103,6 +103,8 @@ parts:
     // an app needs a command, which Manifold runs by its name
     CHECK(recipe_rejected(commandless));
     CHECK(recipe_rejected(commandless + "command: bin/app\n"));
+    // the command ends up in generated files
+    CHECK(recipe_rejected(commandless + "command: 'a b'\n"));
 
     // a core needs a bootstrap with suite and snapshot
     CHECK(recipe_rejected(core));

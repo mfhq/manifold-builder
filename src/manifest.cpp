@@ -60,6 +60,38 @@ struct glz::meta<mfb::AppInfo> {
 };
 
 template<>
+struct glz::meta<mfb::IntegrationFile> {
+    using T = mfb::IntegrationFile;
+    static constexpr auto value = object("path", &T::path, "sha256", &T::sha256, "blake3", &T::blake3);
+};
+
+template<>
+struct glz::meta<mfb::IntegrationAlias> {
+    using T = mfb::IntegrationAlias;
+    static constexpr auto value = object("name", &T::name, "command", &T::command);
+};
+
+template<>
+struct glz::meta<mfb::IntegrationInfo> {
+    using T = mfb::IntegrationInfo;
+    static constexpr auto value = object(
+        "desktop-entry",
+        &T::desktop_entry,
+        "icons",
+        &T::icons,
+        "mime-package",
+        &T::mime_package,
+        "systemd-unit-system",
+        &T::systemd_unit_system,
+        "systemd-unit-user",
+        &T::systemd_unit_user,
+        "udev-rule",
+        &T::udev_rule,
+        "alias",
+        &T::alias);
+};
+
+template<>
 struct glz::meta<mfb::SourceRecord> {
     using T = mfb::SourceRecord;
     static constexpr auto value = object(
@@ -141,6 +173,8 @@ struct glz::meta<mfb::Manifest> {
         &T::app,
         "sources",
         &T::sources,
+        "integration",
+        &T::integration,
         "image",
         &T::image);
 };
