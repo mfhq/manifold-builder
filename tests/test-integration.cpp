@@ -132,11 +132,11 @@ TEST_CASE("the main desktop entry and its icons need no mention", "[integration]
     CHECK(info->desktop_entry[0].blake3 == checksum_data_hex(ENTRY, ChecksumKind::Blake3));
 
     // sorted, so that the manifest does not depend on the order of a directory
-    REQUIRE(info->icons.size() == 4);
-    CHECK(info->icons[0].path == "/app/share/icons/hicolor/32x32/mimetypes/com.example.app.png");
-    CHECK(info->icons[1].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
-    CHECK(info->icons[2].path == "/app/share/icons/hicolor/64x64@2/apps/com.example.app.png");
-    CHECK(info->icons[3].path == "/app/share/icons/hicolor/scalable/apps/com.example.app.svg");
+    REQUIRE(info->icon.size() == 4);
+    CHECK(info->icon[0].path == "/app/share/icons/hicolor/32x32/mimetypes/com.example.app.png");
+    CHECK(info->icon[1].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
+    CHECK(info->icon[2].path == "/app/share/icons/hicolor/64x64@2/apps/com.example.app.png");
+    CHECK(info->icon[3].path == "/app/share/icons/hicolor/scalable/apps/com.example.app.svg");
 
     // a recipe may name that desktop entry too
     info = collect_integration(tree.path(), app_recipe("integration: {desktop-entry: [com.example.app.desktop]}\n"));
@@ -154,6 +154,7 @@ TEST_CASE("an application without integration gets no section", "[integration]")
 TEST_CASE("icons are only collected if they can be installed", "[integration]")
 {
     TempDir tree("integration-icons");
+    add_file(tree, "bin/app", "#!/bin/sh\n");
     add_file(tree, "share/applications/com.example.app.desktop", ENTRY + "[Desktop Action a]\nIcon=theirs\n");
     add_file(tree, "share/icons/hicolor/48x48/apps/theirs.png", "png");
     add_file(tree, "share/icons/hicolor/48x48/apps/com.example.app.png", "png");
@@ -163,8 +164,35 @@ TEST_CASE("icons are only collected if they can be installed", "[integration]")
 
     auto info = collect_integration(tree.path(), app_recipe());
     REQUIRE(info);
-    REQUIRE(info->icons.size() == 1);
-    CHECK(info->icons[0].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
+    REQUIRE(info->icon.size() == 1);
+    CHECK(info->icon[0].path == "/app/share/icons/hicolor/48x48/apps/com.example.app.png");
+}
+
+TEST_CASE("a desktop entry has to run a program of the image", "[integration]")
+{
+    TempDir tree("integration-programs");
+    add_file(tree, "bin/app", "#!/bin/sh\n");
+    add_file(tree, "libexec/helper", "#!/bin/sh\n");
+    const std::string entry = "[Desktop Entry]\nType=Application\nName=App\n";
+    auto recipe = app_recipe("integration: {desktop-entry: [com.example.app.other.desktop]}\n");
+
+    for (const auto *exec : {"Exec=app %U\n", "Exec=\"app\" %U\n", "Exec=/app/libexec/helper\n"}) {
+        add_file(tree, "share/applications/com.example.app.other.desktop", entry + exec);
+        CHECK_NOTHROW(collect_integration(tree.path(), recipe));
+    }
+
+    // a program of the base, a path outside of /app, a program in the wrong place, and none at all
+    for (const auto *exec : {"Exec=vulkaninfo\n", "Exec=/usr/bin/app\n", "Exec=/app/bin/helper\n", "Exec=\n"}) {
+        add_file(tree, "share/applications/com.example.app.other.desktop", entry + exec);
+        CHECK_THROWS_AS(collect_integration(tree.path(), recipe), BuildError);
+    }
+
+    // the actions of an entry run programs too
+    add_file(
+        tree,
+        "share/applications/com.example.app.other.desktop",
+        entry + "Exec=app\n\n[Desktop Action new]\nName=New\nExec=missing --new\n");
+    CHECK_THROWS_WITH(collect_integration(tree.path(), recipe), ContainsSubstring("runs 'missing'"));
 }
 
 TEST_CASE("what a recipe lists has to be there", "[integration]")
@@ -222,6 +250,7 @@ TEST_CASE("the manifest is checked with the rules of Manifold", "[integration]")
         check_integration(tree.path(), finished_manifest(work, *info)), ContainsSubstring("changed after"));
 
     // the main desktop entry has to run the command of the application
+    add_file(tree, "bin/other", "#!/bin/sh\n");
     add_file(
         tree, "share/applications/com.example.app.desktop", "[Desktop Entry]\nType=Application\nName=A\nExec=other\n");
     info = collect_integration(tree.path(), recipe);

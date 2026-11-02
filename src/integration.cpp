@@ -75,17 +75,26 @@ std::vector<std::string> key_values(const std::string &content, std::string_view
 }
 
 /**
- * Warn about a program that a desktop entry runs by its name, if it is not in
- * /app/bin. It may be one of the base, but it is more likely to be a mistake.
+ * Check that every program a desktop entry runs is in the image. Manifold runs
+ * a program that has no path from /app/bin, and refuses one outside of /app.
  */
-void warn_about_missing_programs(const fs::path &app, const IntegrationFile &entry, const std::string &content)
+void check_programs(const fs::path &app, const IntegrationFile &entry, const std::string &content)
 {
     for (const auto &exec : key_values(content, "Exec")) {
-        auto program = exec.substr(0, exec.find(' '));
+        std::string program;
+        fs::path path;
 
-        if (!program.empty() && program.find('/') == std::string::npos
-            && !fs::exists(fs::symlink_status(app / "bin" / program)))
-            LOG_WARNING(logIntegration, "{} runs '{}', which is not in /app/bin", entry.path, program);
+        if (exec.starts_with('"'))
+            program = exec.substr(1, exec.find('"', 1) - 1);
+        else
+            program = exec.substr(0, exec.find(' '));
+        if (program.find('/') == std::string::npos)
+            path = app / "bin" / program;
+        else if (program.starts_with("/app/"))
+            path = app.parent_path() / fs::path(program).relative_path();
+
+        if (program.empty() || path.empty() || !fs::exists(fs::symlink_status(path)))
+            fail("{} runs '{}', which is not in /app/bin or below /app", entry.path, program);
     }
 }
 
@@ -203,11 +212,11 @@ std::optional<IntegrationInfo> collect_integration(const fs::path &tree, const R
     for (const auto &entry : info.desktop_entry) {
         auto content = read_file(tree_path(app, entry));
 
-        warn_about_missing_programs(app, entry, content);
+        check_programs(app, entry, content);
         for (const auto &icon : key_values(content, "Icon"))
             icons.insert(icon);
     }
-    info.icons = collect_icons(app, recipe.component, icons);
+    info.icon = collect_icons(app, recipe.component, icons);
 
     for (const auto &unit : info.systemd_unit_system)
         warn_about_image_paths(app, unit);
@@ -217,7 +226,7 @@ std::optional<IntegrationInfo> collect_integration(const fs::path &tree, const R
     // the order of the manifest must not depend on the recipe or on the directory order
     for (auto *files :
          {&info.desktop_entry,
-          &info.icons,
+          &info.icon,
           &info.mime_package,
           &info.systemd_unit_system,
           &info.systemd_unit_user,
@@ -225,9 +234,8 @@ std::optional<IntegrationInfo> collect_integration(const fs::path &tree, const R
         std::ranges::sort(*files, {}, &IntegrationFile::path);
     std::ranges::sort(info.alias, {}, &IntegrationAlias::name);
 
-    if (info.desktop_entry.empty() && info.icons.empty() && info.mime_package.empty()
-        && info.systemd_unit_system.empty() && info.systemd_unit_user.empty() && info.udev_rule.empty()
-        && info.alias.empty())
+    if (info.desktop_entry.empty() && info.icon.empty() && info.mime_package.empty() && info.systemd_unit_system.empty()
+        && info.systemd_unit_user.empty() && info.udev_rule.empty() && info.alias.empty())
         return std::nullopt;
     return info;
 }

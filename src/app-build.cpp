@@ -271,7 +271,7 @@ private:
 
         // a link may point below the runtime's /usr, which is not in the stage
         if (!fs::exists(fs::symlink_status(app_stage() / "app/bin" / m_recipe.command)))
-            LOG_WARNING(logBuild, "Command '{}' was not installed to /app/bin", m_recipe.command);
+            fail("Command '{}' was not installed to /app/bin", m_recipe.command);
     }
 
     /**

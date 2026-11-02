@@ -77,8 +77,8 @@ struct glz::meta<mfb::IntegrationInfo> {
     static constexpr auto value = object(
         "desktop-entry",
         &T::desktop_entry,
-        "icons",
-        &T::icons,
+        "icon",
+        &T::icon,
         "mime-package",
         &T::mime_package,
         "systemd-unit-system",
