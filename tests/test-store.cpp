@@ -30,6 +30,7 @@ TEST_CASE("cores and platforms are found", "[store]")
             auto id = component + (sdk ? ".sdk" : "");
             return BaseRef{
                 .component = id,
+                .kind = kind,
                 .version = version,
                 .identity = checksum_data_hex(id, ChecksumKind::Sha256),
                 .content_hash = checksum_data_hex(id + version + build, ChecksumKind::Sha256),

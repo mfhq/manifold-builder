@@ -54,12 +54,12 @@ std::string finished_manifest(const TempDir &work, const IntegrationInfo &integr
         .content_hash = checksum_data_hex("content", ChecksumKind::Sha256),
         .base =
             BaseRef{
-                "c.d",
-                "1",
-                1,
-                false,
-                checksum_data_hex("base identity", ChecksumKind::Sha256),
-                checksum_data_hex("base content", ChecksumKind::Sha256),
+                .component = "c.d",
+                .kind = "kit",
+                .version = "1",
+                .revision = 1,
+                .identity = checksum_data_hex("base identity", ChecksumKind::Sha256),
+                .content_hash = checksum_data_hex("base content", ChecksumKind::Sha256),
             },
         .app = AppInfo{"app", "roaming", false},
         .integration = integration,
