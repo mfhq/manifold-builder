@@ -28,6 +28,7 @@ using InstalledPackages = std::map<std::string, std::string>;
  */
 struct BaseRef {
     std::string component;
+    std::string kind; ///< "core", "platform", "kit", "app" or "plugin"
     std::string version;
     int64_t revision = 0;
     bool sdk = false;
@@ -171,7 +172,7 @@ struct Manifest {
 
     BaseRef as_base() const
     {
-        return {component, version, revision, sdk, identity, content_hash};
+        return {component, kind, version, revision, sdk, identity, content_hash};
     }
 };
 

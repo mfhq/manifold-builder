@@ -18,6 +18,8 @@ struct glz::meta<mfb::BaseRef> {
     static constexpr auto value = object(
         "component",
         &T::component,
+        "kind",
+        &T::kind,
         "version",
         &T::version,
         "revision",

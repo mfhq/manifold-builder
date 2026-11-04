@@ -174,6 +174,7 @@ def test_core_manifests(core):
     assert runtime['build']['distribution'] == 'debian'
     assert runtime['build']['suite'] == 'trixie'
     assert sdk['base']['content-hash'] == runtime['content-hash']
+    assert sdk['base']['kind'] == 'core'
 
     # the library goes to the runtime, its development package to the SDK
     apt = runtime['packages']['apt']
