@@ -267,17 +267,4 @@ std::string utc_now()
     return std::format("{:%FT%TZ}", now);
 }
 
-int64_t build_revision_from_time(int64_t epoch)
-{
-    using namespace std::chrono;
-    sys_seconds when{seconds{epoch}};
-    auto day = floor<days>(when);
-    year_month_day date{day};
-    auto day_of_year = (day - sys_days{date.year() / January / 1}).count() + 1;
-    // time of day in 10-second slots, always four digits, so the number and
-    // its decimal text sort the same way
-    auto slot = (when - day).count() / 10;
-    return ((static_cast<int>(date.year()) - 2024) * 1000 + day_of_year) * 10000 + slot;
-}
-
 } // namespace mfb

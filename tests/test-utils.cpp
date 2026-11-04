@@ -22,14 +22,6 @@ TEST_CASE("shell quoting", "[utils]")
     CHECK(shell_quote("") == "''");
 }
 
-TEST_CASE("build revisions", "[utils]")
-{
-    // 2026-01-01T00:00:01Z: two years since 2024, day 1, slot 0
-    CHECK(build_revision_from_time(1767225601) == 20010000);
-    // 2026-10-15T02:38:17Z: day 288, second 9497 = slot 949
-    CHECK(build_revision_from_time(1792031897) == 22880949);
-}
-
 TEST_CASE("files the reference has unchanged are removed", "[utils]")
 {
     TempDir dir("identical");

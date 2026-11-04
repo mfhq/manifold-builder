@@ -18,6 +18,7 @@
 
 #include "manifest.hpp"
 #include "recipe.hpp"
+#include "revision.hpp"
 #include "sandbox.hpp"
 #include "utils.hpp"
 
@@ -35,6 +36,7 @@ struct BuildOptions {
     bool keep_work = false;
     std::optional<fs::path> cache_dir; ///< Where downloads, git mirrors and packages are kept for later builds
     unsigned jobs = 0;                 ///< Parallel jobs of a part build, one per CPU if 0
+    RevisionChoice revision;           ///< How to pick the revision of the images
 
     /**
      * Location of the layers that app and platform builds are based on.
@@ -213,6 +215,7 @@ protected:
 
     // set up by run() after prepare()
     int64_t m_epoch = 0;
+    int64_t m_revision = 0;            ///< Revision of the images, except kits
     std::string m_architecture;        ///< Manifold name of the architecture, as used in manifests
     std::vector<const Part *> m_parts; ///< Parts to build on this architecture, in order
     BuildInfo m_build_info;

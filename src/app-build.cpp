@@ -370,7 +370,8 @@ private:
         // packages on the same base, so we name it after its identity. A strict
         // kit is only used by its app and named after it.
         // Kits take their base's version, so a platform update makes a new kit
-        // version. The revision (build time) tells kits on the same base apart.
+        // version. The revision (build time) tells kits on the same base apart,
+        // whatever --revision says: an app's commit count does not order them.
         auto identity = identity_hash(m_recipe.base, m_architecture, packages);
         std::string component;
         if (sdk)
@@ -387,6 +388,8 @@ private:
             m_recipe.is_platform() ? m_recipe.version : base_ref.version,
             sdk,
             packages);
+        if (!m_recipe.is_platform())
+            manifest.revision = build_revision_from_time(m_epoch);
         manifest.identity = identity;
         // like in a core, the sources of a platform's parts are content too
         std::vector<std::string> extra;

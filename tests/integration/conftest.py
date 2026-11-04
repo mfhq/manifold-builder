@@ -71,6 +71,13 @@ class Bundle:
         pytest.fail(f'the catalog does not describe {ref}')
 
 
+def with_revision(args: tuple[str, ...]) -> tuple[str, ...]:
+    """Number a build by its time unless the test picks a revision, so builds need no git."""
+    if any(arg.startswith('--revision') for arg in args):
+        return args
+    return ('--revision=time', *args)
+
+
 class Builder:
     def __init__(self, path: Path):
         self.path = path
@@ -85,7 +92,9 @@ class Builder:
         )
 
     def build(self, recipe: Path, output: Path, *args: str) -> Bundle:
-        result = self.run('build', '--output', str(output), *args, str(recipe), cwd=recipe.parent)
+        result = self.run(
+            'build', '--output', str(output), *with_revision(args), str(recipe), cwd=recipe.parent
+        )
         if result.returncode != 0:
             pytest.fail(f'build of {recipe.name} failed:\n{result.stdout[-30000:]}')
         check = self.run('check', str(output))
@@ -96,7 +105,9 @@ class Builder:
 
     def build_fails(self, recipe: Path, output: Path, *args: str) -> str:
         """Build a recipe that must fail, and return what the builder printed."""
-        result = self.run('build', '--output', str(output), *args, str(recipe), cwd=recipe.parent)
+        result = self.run(
+            'build', '--output', str(output), *with_revision(args), str(recipe), cwd=recipe.parent
+        )
         assert result.returncode == 1, result.stdout
         return result.stdout
 

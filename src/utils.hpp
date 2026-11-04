@@ -158,15 +158,4 @@ std::string make_search_path(std::initializer_list<std::string> entries);
  */
 std::string utc_now();
 
-/**
- * Compute a revision the builder gives a build at `epoch`.
- *
- * The revision is one number made of the years since 2024, the day of the
- * year in three digits and the time of day in 10-second slots in four digits,
- * all in UTC (22880949 for 2026-10-15T02:38:17Z). This way a later build gets
- * a higher revision without any repository involved. A repository may
- * replace it with a count of its own.
- */
-int64_t build_revision_from_time(int64_t epoch);
-
 } // namespace mfb

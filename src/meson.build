@@ -22,6 +22,7 @@ mfb_lib_sources = files(
     'logging.cpp',
     'recipe.cpp',
     'process.cpp',
+    'revision.cpp',
     'sandbox.cpp',
     'sources/archive.cpp',
     'sources/dir.cpp',
