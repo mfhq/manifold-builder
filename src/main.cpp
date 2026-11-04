@@ -10,6 +10,7 @@
 #include "error.hpp"
 #include "logging.hpp"
 #include "recipe.hpp"
+#include "revision.hpp"
 #include "utils.hpp"
 
 #include <glib.h>
@@ -22,6 +23,7 @@ int main(int argc, char **argv)
     gchar *work_dir = nullptr;
     gchar *runtimes_dir = nullptr;
     gchar *sign_key = nullptr;
+    gchar *revision = nullptr;
     gboolean no_sign = FALSE;
     gboolean keep_work = FALSE;
     gboolean no_cache = FALSE;
@@ -60,6 +62,13 @@ int main(int argc, char **argv)
         {"no-cache", 0, 0, G_OPTION_ARG_NONE,
          &no_cache,
          "Fetch every source and package again, instead of keeping them for later builds", nullptr
+        },
+
+        {"revision", 0, 0, G_OPTION_ARG_STRING,
+         &revision,
+         "Revision of the images: a number, \"git\" for the commits from the last v* tag on, \"time\" for one "
+         "from the build time, or \"auto\" for git in a git repository and time otherwise [auto]",
+         "REVISION"
         },
 
         {"jobs", 'j', 0, G_OPTION_ARG_INT,
@@ -115,6 +124,12 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    std::optional<mfb::RevisionChoice> revision_choice = mfb::parse_revision_choice(revision ? revision : "auto");
+    if (!revision_choice) {
+        std::println(stderr, "manifold-builder: --revision must be a number, auto, git or time, not '{}'", revision);
+        return 2;
+    }
+
     if (sign_key && no_sign) {
         std::println(stderr, "manifold-builder: --sign and --no-sign can not be used together");
         return 2;
@@ -144,6 +159,7 @@ int main(int argc, char **argv)
     if (!no_cache)
         options.cache_dir = mfb::fs::path(g_get_user_cache_dir()) / "manifold-builder";
     options.jobs = static_cast<unsigned>(jobs);
+    options.revision = *revision_choice;
     g_option_context_free(context);
 
     mfb::log::init(verbose);

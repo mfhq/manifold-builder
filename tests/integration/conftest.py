@@ -73,6 +73,14 @@ class Bundle:
         pytest.fail(f'the catalog does not describe {ref}')
 
 
+def with_revision(args: tuple[str, ...]) -> tuple[str, ...]:
+    """Add --revision=time to the arguments, unless they set a revision already."""
+    # test builds must not depend on git
+    if any(arg.startswith('--revision') for arg in args):
+        return args
+    return ('--revision=time', *args)
+
+
 class Builder:
     """Run the manifold-builder binary under test."""
 
@@ -91,7 +99,9 @@ class Builder:
 
     def _build(self, recipe: Path, output: Path, *args: str) -> subprocess.CompletedProcess:
         """Run a build of a recipe from the directory it is in."""
-        return self.run('build', '--output', str(output), *args, str(recipe), cwd=recipe.parent)
+        return self.run(
+            'build', '--output', str(output), *with_revision(args), str(recipe), cwd=recipe.parent
+        )
 
     def build(self, recipe: Path, output: Path, *args: str) -> Bundle:
         """Build a recipe that must succeed, check the bundle and return it."""

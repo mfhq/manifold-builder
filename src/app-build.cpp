@@ -373,6 +373,10 @@ private:
             m_recipe.is_platform() ? m_recipe.version : base_ref.version,
             sdk,
             packages);
+        // NOTE: Kits on the same base are ordered by build time, whatever --revision
+        // says. An app's commit count does not order them.
+        if (!m_recipe.is_platform())
+            manifest.revision = build_revision_from_time(m_epoch);
         manifest.identity = identity;
         // a platform's part sources go into the content hash
         std::vector<std::string> extra;

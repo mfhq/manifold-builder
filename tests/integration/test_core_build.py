@@ -289,12 +289,17 @@ def test_app_on_platform(builder, core, platform, tmp_path):
     unpack(platform.path, runtimes)
     recipe = write_recipe(tmp_path, 'com.example.Hello', PLATFORM_APP_RECIPE)
 
-    bundle = builder.build(recipe, tmp_path / 'hello.manifold', '--runtimes-dir', str(runtimes))
+    bundle = builder.build(
+        recipe, tmp_path / 'hello.manifold', '--runtimes-dir', str(runtimes), '--revision=7'
+    )
 
     kit = bundle.manifest('kit')
     app = bundle.manifest('app')
     assert kit['component'].startswith('com.example.testcore.jpeg.')
     assert kit['base']['component'] == 'com.example.testcore.jpeg'
+    # the app takes the given revision, while its kit keeps the build time
+    assert app['revision'] == 7
+    assert kit['revision'] >= 20010000
 
     tree = bundle.extract(app)
     assert (tree / 'app/bin/hello').is_file()

@@ -159,6 +159,7 @@ fs::path Build::run()
 void Build::setup()
 {
     m_epoch = m_system->epoch();
+    m_revision = resolve_revision(m_options.revision, m_recipe_dir, m_epoch);
     m_architecture = m_system->architecture();
     m_parts = parts_to_build(m_recipe, m_architecture);
 
@@ -508,7 +509,7 @@ Manifest Build::manifest_for(
     manifest.component = std::move(component);
     manifest.kind = std::move(kind);
     manifest.version = std::move(version);
-    manifest.revision = build_revision_from_time(m_epoch);
+    manifest.revision = m_revision;
     manifest.architecture = m_architecture;
     manifest.sdk = sdk;
     manifest.build = m_build_info;
