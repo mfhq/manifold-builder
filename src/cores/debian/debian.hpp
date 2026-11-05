@@ -109,9 +109,18 @@ private:
     std::string script(std::string_view name) const;
 
     /**
-     * Run apt-get inside the tree.
+     * Update the package lists of the tree, trying again if a download
+     * fails.
      */
-    void apt_get(Script &s, const fs::path &tree, std::vector<std::string> arguments) const;
+    void update_lists(Script &s, const fs::path &tree) const;
+
+    /**
+     * Run apt-get inside the tree, for a command that installs or upgrades
+     * packages.
+     *
+     * The packages are downloaded first, trying again if a download fails.
+     */
+    void apt_get(Script &s, const fs::path &tree, const std::vector<std::string> &arguments) const;
 
     /**
      * Get the command line that runs bash `commands` inside the tree.

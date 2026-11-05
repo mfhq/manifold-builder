@@ -49,6 +49,55 @@ const Architecture *find_dpkg_architecture(std::string_view dpkg)
 }
 
 /**
+ * How often we try to download lists and packages, and how long we wait
+ * before trying again: 15 seconds after the first attempt, 30 after the
+ * second, and so on, two and a half minutes in all.
+ */
+constexpr int DOWNLOAD_ATTEMPTS = 5;
+constexpr int DOWNLOAD_PAUSE_SECONDS = 15;
+
+/**
+ * Get the apt-get command line with `arguments`.
+ */
+std::vector<std::string> apt_get_command(std::vector<std::string> arguments)
+{
+    // We do what debuerreotype-apt-get does, minus its umask. The Release
+    // files of a snapshot are long expired, so we don't check Valid-Until.
+    //
+    // NOTE: apt must not try failed downloads again itself, we do that.
+    // When a server keeps failing, the retry loop of apt 3.0.3 can get
+    // stuck and add a warning on every pass, until apt runs out of memory
+    // (Debian bug #1111554). snapshot.debian.org fails often enough.
+    arguments.insert(
+        arguments.begin(), {"apt-get", "-o", "Acquire::Check-Valid-Until=false", "-o", "Acquire::Retries=0"});
+    return arguments;
+}
+
+/**
+ * Get bash commands that run `command` until it succeeds, at most
+ * DOWNLOAD_ATTEMPTS times.
+ */
+std::string retried(const std::vector<std::string> &command)
+{
+    return std::format(
+        R"sh(
+attempt=1
+until {0}; do
+    status=$?
+    if [ "$attempt" -ge {1} ]; then
+        exit "$status"
+    fi
+    echo "Downloading failed, trying again in $((attempt * {2})) seconds" >&2
+    sleep "$((attempt * {2}))"
+    attempt=$((attempt + 1))
+done
+)sh",
+        shell_join(command),
+        DOWNLOAD_ATTEMPTS,
+        DOWNLOAD_PAUSE_SECONDS);
+}
+
+/**
  * Check that debootstrap has the EXCLUDE_DEPENDENCY patches.
  *
  * debuerreotype needs them for --merged-usr. We check this up front, so we
@@ -224,7 +273,7 @@ void DebianSystem::bootstrap(Script &s, const fs::path &rootfs, const Recipe &re
     // every package version
     s.run({script("debuerreotype-debian-sources-list"), "--deb822", "--snapshot", rootfs.string(), m_bootstrap.suite});
     s.run({script("debuerreotype-minimizing-config"), rootfs.string()});
-    apt_get(s, rootfs, {"update", "-qq"});
+    update_lists(s, rootfs);
     apt_get(s, rootfs, {"full-upgrade", "-yqq"});
 
     // slim down before anything else is installed, so dpkg keeps the
@@ -236,7 +285,7 @@ void DebianSystem::bootstrap(Script &s, const fs::path &rootfs, const Recipe &re
 void DebianSystem::refresh(Script &s, const fs::path &tree) const
 {
     write_epoch_marker(s, tree);
-    apt_get(s, tree, {"update", "-qq"});
+    update_lists(s, tree);
 }
 
 void DebianSystem::find_linked_packages(Script &s, const fs::path &tree, const std::string &dir, const fs::path &output)
@@ -301,12 +350,24 @@ void DebianSystem::install(Script &s, const fs::path &tree, const std::vector<st
     apt_get(s, tree, install);
 }
 
-void DebianSystem::apt_get(Script &s, const fs::path &tree, std::vector<std::string> arguments) const
+void DebianSystem::update_lists(Script &s, const fs::path &tree) const
 {
-    // We do what debuerreotype-apt-get does, minus its umask. The Release
-    // files of a snapshot are long expired, so we don't check Valid-Until.
-    arguments.insert(arguments.begin(), {"apt-get", "-o", "Acquire::Check-Valid-Until=false"});
-    run_in_tree(s, tree, shell_join(arguments));
+    // By default, a list that failed to download for a while is only a
+    // warning, and apt goes on with the old list, or none. We want the
+    // error, so we can try again.
+    run_in_tree(s, tree, retried(apt_get_command({"-o", "APT::Update::Error-Mode=any", "update", "-qq"})));
+}
+
+void DebianSystem::apt_get(Script &s, const fs::path &tree, const std::vector<std::string> &arguments) const
+{
+    // download everything first, so we try only the downloads again, and
+    // the command itself finds all packages in the cache
+    auto download = arguments;
+    download.insert(download.begin(), "--download-only");
+    run_in_tree(
+        s,
+        tree,
+        std::format("{}{}\n", retried(apt_get_command(std::move(download))), shell_join(apt_get_command(arguments))));
 }
 
 void DebianSystem::run_in_tree(Script &s, const fs::path &tree, const std::string &command) const
