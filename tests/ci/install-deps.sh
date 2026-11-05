@@ -35,6 +35,8 @@ case " $ID ${ID_LIKE:-} " in
             systemd-dev
             libsystemd-dev
             libcurl4-openssl-dev
+            libzck-dev
+            libzstd-dev
             libcryptsetup-dev
             libelf-dev
             # for the AppStream subproject, if the distribution's version is too old
@@ -96,6 +98,8 @@ case " $ID ${ID_LIKE:-} " in
             'pkgconfig(libsystemd)'
             'pkgconfig(systemd)'
             'pkgconfig(udev)'
+            'pkgconfig(zck)'
+            'pkgconfig(libzstd)'
             'pkgconfig(libcryptsetup)'
             'pkgconfig(libelf)'
             # for the AppStream subproject, as the distribution's version is too old
@@ -141,6 +145,8 @@ case " $ID ${ID_LIKE:-} " in
             # for the Manifold subproject
             systemd
             curl
+            zchunk
+            zstd
             cryptsetup
             libelf
             # what builds run; Arch has no debuerreotype, so no integration tests here yet
