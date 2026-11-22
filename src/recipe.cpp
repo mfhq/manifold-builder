@@ -185,6 +185,8 @@ struct glz::meta<mfb::Recipe> {
         &T::run_on_sdk,
         "integration",
         &T::integration,
+        "permissions",
+        &T::permissions,
         "rename",
         &T::rename,
         "build-options",
@@ -421,6 +423,11 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
             problem(std::format("'kit-strategy' must be 'roaming' or 'strict', not '{}'", recipe.kit_strategy));
         if (recipe.integration)
             validate_integration(recipe, problem);
+        // Manifold refuses to install an application with a permission it does not know
+        for (const auto &permission : recipe.permissions) {
+            if (mf_permission_from_string(permission.c_str()) == MF_PERMISSION_UNKNOWN)
+                problem(std::format("permissions: '{}' is not a permission that Manifold knows", permission));
+        }
         for (const auto &[pattern, name] : recipe.rename.value_or(std::map<std::string, std::string>{})) {
             if (pattern.empty() || !stays_below(pattern))
                 problem(std::format("rename: '{}' has to be a path below /app", pattern));
@@ -438,6 +445,7 @@ void validate(const Recipe &recipe, std::string_view origin, const fs::path &dir
             {"generate-sdk", recipe.generate_sdk},
             {"run-on-sdk", recipe.run_on_sdk},
             {"integration", recipe.integration.has_value()},
+            {"permissions", !recipe.permissions.empty()},
             {"rename", recipe.rename.has_value()},
         };
         for (const auto &[key, set] : app_keys) {

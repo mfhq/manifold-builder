@@ -168,6 +168,7 @@ struct Manifest {
     std::optional<AppInfo> app;
     std::optional<std::vector<SourceRecord>> sources;
     std::optional<IntegrationInfo> integration;
+    std::optional<std::vector<std::string>> permissions; ///< Only for an application that asks for any
     std::optional<ImageFile> image;
 
     BaseRef as_base() const

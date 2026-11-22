@@ -56,12 +56,13 @@ TEST_CASE("Recipe: sample recipes", "[recipe]")
     REQUIRE(core.bootstrap);
     CHECK(core.bootstrap->suite == "trixie");
     REQUIRE(core.parts.size() == 1);
-    CHECK(std::get<Part>(core.parts[0]).post_install.size() == 3);
+    CHECK(std::get<Part>(core.parts[0]).name == "manifold-guest-utils");
 
-    // the test app has a command, but no SDK
+    // the test app has a command and a permission, but no SDK
     auto test_app = load_recipe(samples / "com.example.mftestapp.yaml");
     CHECK(test_app.command == "mftestapp");
     CHECK(!test_app.generate_sdk);
+    CHECK(test_app.permissions == std::vector<std::string>{"host-commands"});
 
     // KDE Frameworks are a platform
     CHECK(load_recipe(samples / "net.debian.core13.kf6.yaml").is_platform());
@@ -106,6 +107,10 @@ parts:
     // the command ends up in generated files
     CHECK(recipe_rejected(commandless + "command: 'a b'\n"));
 
+    // an app only asks for permissions that Manifold knows
+    CHECK(!recipe_rejected(app + "permissions: [host-commands, host-tmp]\n"));
+    CHECK(recipe_rejected(app + "permissions: [from-the-future]\n"));
+
     // a core needs a bootstrap with suite and snapshot
     CHECK(recipe_rejected(core));
     CHECK(recipe_rejected(core + "bootstrap: {suite: trixie}\n"));
@@ -131,6 +136,7 @@ TEST_CASE("Recipe: keys per recipe type", "[recipe]")
         CHECK(recipe_rejected(recipe + "kit-strategy: strict\n"));
         CHECK(recipe_rejected(recipe + "generate-sdk: true\n"));
         CHECK(recipe_rejected(recipe + "run-on-sdk: true\n"));
+        CHECK(recipe_rejected(recipe + "permissions: [host-commands]\n"));
         // the default does no harm
         CHECK(!recipe_rejected(recipe + "kit-strategy: roaming\n"));
     };

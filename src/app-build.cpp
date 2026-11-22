@@ -409,6 +409,9 @@ private:
         manifest.base = sdk ? output("kit-sdk").manifest.as_base() : output("kit").manifest.as_base();
         manifest.build.recipe_hash = m_recipe.hash;
         manifest.app = AppInfo{m_recipe.command, m_recipe.kit_strategy, m_recipe.run_on_sdk};
+        // only the application itself is launched, its SDK is not
+        if (!sdk && !m_recipe.permissions.empty())
+            manifest.permissions = m_recipe.permissions;
         manifest.sources = m_sources;
         return manifest;
     }

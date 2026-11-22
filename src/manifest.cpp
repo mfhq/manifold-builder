@@ -177,6 +177,8 @@ struct glz::meta<mfb::Manifest> {
         &T::sources,
         "integration",
         &T::integration,
+        "permissions",
+        &T::permissions,
         "image",
         &T::image);
 };

@@ -66,6 +66,7 @@ packages-sdk:
     - libglib2.0-dev
     - libgio-2.0-dev
     - libicu-dev
+    - libsystemd-dev
     - build-essential
     - meson
     - cmake
@@ -98,18 +99,13 @@ actions:
 
 # Parts are built from source in the SDK environment and installed into the runtime.
 parts:
-  - name: flatpak-xdg-utils
+  # mfhost-run, and the xdg-open and xdg-email that ask the desktop portals of the host
+  - name: manifold-guest-utils
     buildsystem: meson
-    config-opts: [--bindir=libexec/flatpak-xdg-utils]
     sources:
       - type: git
-        url: https://github.com/flatpak/flatpak-xdg-utils.git
-        tag: 1.0.6
-    post-install:
-      - ln -s ../libexec/flatpak-xdg-utils/xdg-open /usr/bin/xdg-open
-      - ln -s ../libexec/flatpak-xdg-utils/xdg-email /usr/bin/xdg-email
-      # talks to Flatpak's session helper, which does not exist here
-      - rm /usr/libexec/flatpak-xdg-utils/flatpak-spawn
+        url: https://github.com/mfhq/manifold-guest-utils.git
+        branch: main
 
 # Paths relative to /usr that only the SDK image keeps. They are moved out of
 # the runtime image. Shell globs are allowed, and ** matches across directories.

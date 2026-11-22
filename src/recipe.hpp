@@ -217,6 +217,12 @@ struct Recipe {
     std::optional<IntegrationSettings> integration;
 
     /**
+     * What the application asks for beyond what every application gets, by
+     * the names Manifold knows, like "host-commands".
+     */
+    std::vector<std::string> permissions;
+
+    /**
      * Files below /app to give another name in the image, as the shell glob of
      * their paths and their new name.
      */

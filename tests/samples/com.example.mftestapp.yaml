@@ -21,6 +21,9 @@ packages-sdk:
 rename:
   lib/udev/rules.d/60-mftestapp.rules: 60-com.example.mftestapp.rules
 
+permissions:
+- host-commands
+
 integration:
   alias:
   - mftestapp
