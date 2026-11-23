@@ -175,6 +175,8 @@ def test_core_manifests(core):
     assert runtime['build']['suite'] == 'trixie'
     assert sdk['base']['content-hash'] == runtime['content-hash']
     assert sdk['base']['kind'] == 'core'
+    # a core SDK has no base SDK
+    assert 'base-sdk' not in sdk
 
     # the library goes to the runtime, its development package to the SDK
     apt = runtime['packages']['apt']
@@ -274,6 +276,8 @@ def test_platform(platform, core):
     assert not (tree / 'usr/include').exists()
     assert (sdk_tree / 'usr/include/jpeg-platform.h').is_file()
 
+    # the SDK names the SDK of the core it was built with
+    assert sdk['base-sdk']['content-hash'] == core.manifest('core', sdk=True)['content-hash']
     # the SDK's package database also has what the core SDK below it installed
     assert {'libzstd-dev', 'pkgconf'} <= sdk['packages']['apt'].keys()
 
@@ -335,6 +339,9 @@ def test_app_metainfo_file(builder, core, tmp_path):
     kit_sdk = bundle.manifest('kit', sdk=True)
     assert app_sdk['component'] == 'com.example.Hello.sdk'
     assert app_sdk['base']['component'] == kit_sdk['component']
+    # only the kit SDK names the core SDK, the app SDK gets it through its base
+    assert kit_sdk['base-sdk']['component'] == 'com.example.testcore.sdk'
+    assert 'base-sdk' not in app_sdk
     # the kit SDK installs nothing, its package list is the one of the core SDK
     assert 'libzstd-dev' in kit_sdk['packages']['apt']
     # the app SDK has the same package list

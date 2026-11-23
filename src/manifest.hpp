@@ -163,6 +163,12 @@ struct Manifest {
     std::string content_hash;
 
     std::optional<BaseRef> base;
+    /**
+     * The SDK of the layer below, set for the SDK of a platform or a kit.
+     * An SDK only has the development files of its own layer. The SDK of
+     * an application needs none, it is layered on the SDK of its kit.
+     */
+    std::optional<BaseRef> base_sdk;
     BuildInfo build;
     std::map<std::string, InstalledPackages> packages; ///< By package system ("apt"): name -> version.
     std::optional<AppInfo> app;

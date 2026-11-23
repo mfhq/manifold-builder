@@ -167,6 +167,8 @@ struct glz::meta<mfb::Manifest> {
         &T::content_hash,
         "base",
         &T::base,
+        "base-sdk",
+        &T::base_sdk,
         "build",
         &T::build,
         "packages",
@@ -204,6 +206,10 @@ void check_hashes(const Manifest &manifest, const fs::path &path)
     if (manifest.base) {
         check("base.identity", manifest.base->identity);
         check("base.content-hash", manifest.base->content_hash);
+    }
+    if (manifest.base_sdk) {
+        check("base-sdk.identity", manifest.base_sdk->identity);
+        check("base-sdk.content-hash", manifest.base_sdk->content_hash);
     }
     if (manifest.image) {
         check("image.blake3", manifest.image->blake3);

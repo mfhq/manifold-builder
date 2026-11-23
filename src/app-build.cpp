@@ -387,6 +387,9 @@ private:
         manifest.content_hash = content_hash(
             m_recipe.base, m_architecture, manifest.component, manifest.version, packages, extra);
         manifest.base = sdk ? output("kit").manifest.as_base() : base_ref;
+        // the SDK is built with the SDK of the layer below, and needs it wherever it is used
+        if (sdk)
+            manifest.base_sdk = m_stack.base().sdk.as_base();
         return manifest;
     }
 
