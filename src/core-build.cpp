@@ -189,6 +189,16 @@ void postprocess_core(Script &s, const fs::path &tree, const std::string &multia
     auto conf = tree / "etc/fonts/conf.d/50-manifold-host-fonts.conf";
     s.run({"mkdir", "-p", conf.parent_path().string()});
     s.write_file(conf, fonts);
+
+    // Manifold sets the variables of the environment files of its runtimes for
+    // an application. Everything that follows the XDG base directories only
+    // looks below /usr for data, so we make it look at the application too.
+    const std::string environment = R"(# Written by manifold-builder: the data of the application.
+XDG_DATA_DIRS=/app/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
+)";
+    auto env_conf = tree / "usr/lib/manifold/environment.d/50-manifold-app.conf";
+    s.run({"mkdir", "-p", env_conf.parent_path().string()});
+    s.write_file(env_conf, environment);
 }
 
 void check_merged_usr(const fs::path &tree)

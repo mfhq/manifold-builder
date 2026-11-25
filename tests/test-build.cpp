@@ -101,4 +101,8 @@ TEST_CASE("Core: Manifold configuration", "[build][core]")
     CHECK_THAT(text, ContainsSubstring("/tree/etc/fonts/conf.d/50-manifold-host-fonts.conf"));
     CHECK_THAT(
         text, ContainsSubstring(R"(<remap-dir as-path="/usr/share/fonts">/run/host/usr/share/fonts</remap-dir>)"));
+
+    // environment of the app
+    CHECK_THAT(text, ContainsSubstring("/tree/usr/lib/manifold/environment.d/50-manifold-app.conf"));
+    CHECK_THAT(text, ContainsSubstring("XDG_DATA_DIRS=/app/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"));
 }

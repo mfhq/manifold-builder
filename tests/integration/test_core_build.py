@@ -207,6 +207,10 @@ def test_core_tree(core):
     # files of the Manifold configuration
     assert (tree / 'etc/ld.so.conf.d/manifold-app.conf').is_file()
     assert (tree / 'etc/fonts/conf.d/50-manifold-host-fonts.conf').is_file()
+    assert (
+        'XDG_DATA_DIRS=/app/share:'
+        in (tree / 'usr/lib/manifold/environment.d/50-manifold-app.conf').read_text()
+    )
 
     # parts: installed, linked, copied, cleaned up
     assert (tree / 'usr/share/testcore/data.txt').is_file()
