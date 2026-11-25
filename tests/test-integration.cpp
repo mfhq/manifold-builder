@@ -374,6 +374,7 @@ TEST_CASE("Host integration: manifest check", "[integration]")
         add_file(tree, "share/applications/org.other.desktop");
         info->desktop_entry[0].path = "/app/share/applications/org.other.desktop";
         CHECK_THROWS_WITH(
-            check_integration(tree.path(), finished_manifest(work, *info)), ContainsSubstring("is not named like"));
+            check_integration(tree.path(), finished_manifest(work, *info)),
+            ContainsSubstring("has to start with com.example.app"));
     }
 }

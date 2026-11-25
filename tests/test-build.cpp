@@ -25,7 +25,7 @@ namespace
 /**
  * Create an empty file, with the directories above it.
  */
-void add_empty_file(const fs::path &file)
+void create_empty_file(const fs::path &file)
 {
     fs::create_directories(file.parent_path());
     write_file(file, "");
@@ -50,7 +50,7 @@ TEST_CASE("Build: pruning the cache", "[build]")
 
     // not used for 40 days
     for (const auto *file : {"downloads/old", "packages/old.deb", "packages/lock", "packages/partial/old.deb"}) {
-        add_empty_file(cache / file);
+        create_empty_file(cache / file);
         make_old(cache / file);
     }
     for (const auto *mirror : {"git/old.git", "git/busy.git"}) {
@@ -59,8 +59,8 @@ TEST_CASE("Build: pruning the cache", "[build]")
     }
 
     // used lately
-    add_empty_file(cache / "downloads/new");
-    add_empty_file(cache / "packages/new.deb");
+    create_empty_file(cache / "downloads/new");
+    create_empty_file(cache / "packages/new.deb");
     fs::create_directories(cache / "git/new.git/objects");
 
     // another build is using this mirror
