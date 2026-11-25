@@ -18,18 +18,26 @@ namespace
 {
 
 /**
+ * References to a layer and to its SDK.
+ */
+struct LayerRefs {
+    BaseRef runtime; ///< reference to a layer
+    BaseRef sdk;     ///< reference to its SDK
+};
+
+/**
  * Write the manifests and fake images of a layer and its SDK to `dir`, with `build` telling rebuilds apart.
  */
-BaseRef write_layer(
+LayerRefs write_layer(
     const fs::path &dir,
     const std::string &component,
     const std::string &kind,
     const std::string &version,
     int64_t revision,
     const std::string &build = "",
-    const std::optional<BaseRef> &base = std::nullopt)
+    const std::optional<LayerRefs> &base = std::nullopt)
 {
-    BaseRef runtime;
+    LayerRefs refs;
     for (bool sdk : {false, true}) {
         auto manifest = test::fake_manifest(component + (sdk ? ".sdk" : ""), kind);
         manifest.version = version;
@@ -39,18 +47,20 @@ BaseRef write_layer(
 
         // an SDK is layered on its own runtime
         if (sdk)
-            manifest.base = runtime;
+            manifest.base = refs.runtime;
         else if (base)
-            manifest.base = base;
+            manifest.base = base->runtime;
+        // the SDK of a platform names the SDK of its core
+        if (sdk && base)
+            manifest.base_sdk = base->sdk;
 
         auto stem = std::format("{}_{}-{}_x86-64", manifest.component, version, revision);
         manifest.image = test::fake_image(dir, stem + ".raw");
         write_manifest(manifest, dir / (stem + ".manifold.json"));
 
-        if (!sdk)
-            runtime = manifest.as_base();
+        (sdk ? refs.sdk : refs.runtime) = manifest.as_base();
     }
-    return runtime;
+    return refs;
 }
 
 /**
@@ -89,11 +99,11 @@ TEST_CASE("Store: finding the base of a build", "[store]")
 
     // a directory of extracted bundles, with several versions and revisions of a core
     write_layer(dir, "net.example.core", "core", "12.1a", 1);
-    auto core_ref = write_layer(dir, "net.example.core", "core", "12.2", 1);
+    auto core_refs = write_layer(dir, "net.example.core", "core", "12.2", 1);
     write_layer(dir, "net.example.core", "core", "12.10", 1);
     write_layer(dir, "net.example.core", "core", "12.10", 2);
     // a platform built on core 12.2
-    write_layer(dir, "net.example.platform", "platform", "20260117.0900", 0, "", core_ref);
+    write_layer(dir, "net.example.platform", "platform", "20260117.0900", 0, "", core_refs);
     // a newer build of the core version the platform was built on
     write_layer(dir, "net.example.core", "core", "12.2", 2, "rebuilt");
 
